@@ -40,9 +40,9 @@ globalThis.fetch = async url => {
   return Response.json({ keys: [{ ...key, kid: "teste" }] });
 };
 
-async function token(email, overrides = {}) {
+async function token(email, overrides = {}, kid = "teste") {
   const part = value => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const jwt = part({ alg: "RS256", kid: "teste" }) + "." + part({
+  const jwt = part({ alg: "RS256", kid }) + "." + part({
     iss: env.ACCESS_TEAM_URL, aud: [env.ACCESS_AUD],
     exp: Date.now() / 1000 + 300, email, ...overrides
   });
@@ -160,4 +160,19 @@ assert.equal((await request(office, "state", "PUT", { revision: fullView.revisio
 const afterRename = (await request(newManager)).body;
 assert.equal(afterRename.data.units[0].name, "Nova Loja Renomeada");
 assert.deepEqual(afterRename.data.tasks, newView.data.tasks);
+
+assert.match((await request(await token(users[0][0], {}, "ausente"))).body.error, /ACCESS-CHAVE-ID/);
+env.ACCESS_TEAM_URL = "https://outra-equipe.cloudflareaccess.com";
+const renewed = await token(users[0][0]);
+globalThis.fetch = async () => new Response(null, { status: 403 });
+const refusedKeys = await request(renewed);
+assert.equal(refusedKeys.status, 503);
+assert.match(refusedKeys.body.error, /ACCESS-CHAVE-HTTP-403/);
+let attempts = 0;
+globalThis.fetch = async () => {
+  if (++attempts === 1) throw new Error("Falha de rede");
+  return Response.json({ keys: [{ ...key, kid: "teste" }] });
+};
+assert.equal((await request(renewed)).status, 200);
+assert.equal(attempts, 2);
 console.log("OK: autenticação, migração, unidades novas e renomeadas, isolamento, backup, checklist e conflitos de revisão.");

@@ -28,16 +28,44 @@ function decodePart(value) {
 async function publicKey(team, kid) {
   if (keysCache?.team !== team || keysCache.expires <= Date.now() ||
       (!keysCache.keys.some(key => key.kid === kid) && keysCache.loaded < Date.now() - 60000)) {
-    const response = await fetch(team + "/cdn-cgi/access/certs", { redirect: "error" });
-    if (!response.ok) throw new Error("Chaves indisponíveis");
-    const { keys } = await response.json();
-    if (!Array.isArray(keys)) throw new Error("Chaves inválidas");
+    const response = await fetchAccessKeys(team);
+    const document = await response.json().catch(() => null);
+    const keys = Array.isArray(document?.keys) ? document.keys.filter(key =>
+      key?.kty === "RSA" && typeof key.kid === "string" &&
+      typeof key.n === "string" && typeof key.e === "string"
+    ) : [];
+    if (!keys.length) {
+      throw new HttpError(503, "O servidor de chaves do Access devolveu uma resposta inválida (ACCESS-CHAVE-RESPOSTA).");
+    }
     const loaded = Date.now();
     keysCache = { team, keys, loaded, expires: loaded + 15 * 60000 };
   }
-  const jwk = keysCache.keys.find(key => key.kid === kid && key.kty === "RSA");
-  if (!jwk) throw new Error("Chave desconhecida");
-  return crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const jwk = keysCache.keys.find(key => key.kid === kid);
+  if (!jwk) throw new HttpError(401, "A chave da sessão não consta na lista do Access (ACCESS-CHAVE-ID).");
+  try {
+    return await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  } catch {
+    throw new HttpError(503, "O Worker não conseguiu importar a chave do Access (ACCESS-CHAVE-IMPORTACAO).");
+  }
+}
+
+async function fetchAccessKeys(team) {
+  let response;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    response = await fetch(team + "/cdn-cgi/access/certs", {
+      redirect: "manual",
+      cache: "no-store",
+      headers: { Accept: "application/json", "User-Agent": "Drogalink-Tarefas/1.0" },
+      signal: AbortSignal.timeout(3500)
+    }).catch(() => null);
+    if (response && response.status < 500) break;
+    await response?.body?.cancel().catch(() => {});
+  }
+  if (!response?.ok) {
+    const code = response ? `HTTP-${response.status}` : "REDE";
+    throw new HttpError(503, `O Worker não conseguiu consultar as chaves do Access (ACCESS-CHAVE-${code}).`);
+  }
+  return response;
 }
 
 function accessToken(request) {
@@ -81,7 +109,8 @@ async function verifiedEmail(request, env) {
     stage = "IDENTIDADE";
     if (typeof email !== "string" || !email.trim().includes("@")) throw new Error();
     return email.trim().toLowerCase();
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(401, `O painel não conseguiu validar a sessão do Cloudflare Access (ACCESS-${stage}).`);
   }
 }
