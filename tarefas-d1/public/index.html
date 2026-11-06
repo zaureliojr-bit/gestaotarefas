@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1749a3">
+  <title>Drogalink | Gestão de Tarefas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section id="syncGate" class="card gate">
+    <h1>Drogalink · Tarefas</h1>
+    <p id="initialError" role="status">Conectando ao painel da rede…</p>
+    <button id="retrySync" class="btn btn-primary">Tentar novamente</button>
+    <a href="/cdn-cgi/access/logout">Sair</a>
+  </section>
+  <div class="app-shell" id="panel" hidden>
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#" aria-label="Drogalink início">
+        <span class="brand-mark">D</span>
+        <span><strong>Drogalink</strong><small>GESTÃO DE TAREFAS</small></span>
+      </a>
+      <p class="nav-caption">MENU PRINCIPAL</p>
+      <nav class="main-nav">
+        <button class="nav-btn active" data-page="overview"><span>▦</span> Visão geral</button>
+        <button class="nav-btn" data-page="tasks"><span>☷</span> Tarefas</button>
+        <button class="nav-btn" data-page="units" data-admin><span>⌂</span> Unidades</button>
+        <button class="nav-btn" data-page="departments" data-admin><span>▤</span> Departamentos</button>
+        <button class="nav-btn" data-page="people" data-admin><span>♙</span> Funcionários</button>
+        <button class="nav-btn" data-page="reports"><span>▥</span> Relatórios</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="profile"><div class="avatar" id="accountAvatar" aria-hidden="true"></div><div><b id="accountName"></b><small id="accountRole"></small></div></div>
+        <span class="demo-label">Dados compartilhados pela rede</span>
+        <div class="backup-actions" data-admin>
+          <button class="btn btn-light" id="exportBackup">Exportar backup</button>
+          <button class="btn btn-light" id="importBackup">Importar backup</button>
+          <input type="file" id="backupFile" accept=".json,application/json" hidden>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu">☰</button>
+        <div><strong id="pageTitle">Visão geral</strong><small>Painel administrativo / <span id="breadcrumb">Visão geral</span></small></div>
+        <div class="top-user"><button class="btn btn-light" id="syncNow">Sincronizar</button><a href="/cdn-cgi/access/logout">Sair</a></div>
+      </header>
+
+      <div class="content">
+        <p id="storageWarning" class="storage-warning" role="alert" hidden></p>
+        <div class="unit-toolbar">
+          <label>Unidade <select id="filterUnit"></select></label>
+          <button class="btn btn-light" id="cashRoutine" hidden></button>
+          <small id="cashRoutineHint" class="task-meta" hidden>O fechamento diário aparece na lista de tarefas da unidade.</small>
+        </div>
+        <section class="page active" id="page-overview">
+          <div class="page-heading"><div><h1 id="greeting">Visão geral das tarefas</h1><p>Acompanhe o andamento das atividades da equipe.</p></div><button class="btn btn-primary" id="newTaskTop" data-admin>＋ Nova tarefa</button></div>
+          <div class="metrics">
+            <article class="metric"><span>Total de tarefas</span><strong id="metricTotal">0</strong><small>Na seleção atual</small></article>
+            <article class="metric"><span>Em andamento</span><strong id="metricProgress">0</strong><small class="amber">Em execução</small></article>
+            <article class="metric"><span>Concluídas</span><strong id="metricDone">0</strong><small class="green">Finalizadas</small></article>
+            <button class="metric metric-link" id="dueToday" type="button"><span>Vencem hoje</span><strong id="metricToday">0</strong><small>Ver tarefas</small></button>
+            <button class="metric metric-link" id="dueLate" type="button"><span>Atrasadas</span><strong id="metricLate">0</strong><small class="red">Ver tarefas</small></button>
+          </div>
+          <div class="overview-grid">
+            <article class="card"><div class="card-heading"><div><h2>Tarefas recentes</h2><p>Últimas atividades cadastradas</p></div><button class="link-btn" data-go="tasks">Ver todas →</button></div><div id="recentTasks"></div></article>
+            <article class="card"><div class="card-heading"><div><h2>Departamentos</h2><p>Distribuição das tarefas</p></div></div><div id="departmentProgress"></div></article>
+          </div>
+          <article class="card activity-card"><h2>Sobre esta versão</h2><p>O painel sincroniza pela internet. Use Sincronizar para buscar atualizações agora.</p></article>
+        </section>
+
+        <section class="page" id="page-tasks">
+          <div class="page-heading"><div><h1>Tarefas</h1><p>Crie, distribua e acompanhe as atividades.</p></div><button class="btn btn-primary" id="newTask" data-admin>＋ Nova tarefa</button></div>
+          <div class="filters card">
+            <input id="searchTasks" type="search" aria-label="Buscar tarefas" placeholder="Buscar por tarefa ou responsável">
+            <select id="filterStatus" aria-label="Filtrar por status"><option value="">Todos os status</option><option>Pendente</option><option>Em andamento</option><option>Concluída</option></select>
+            <select id="filterDepartment" aria-label="Filtrar por departamento"><option value="">Todos os departamentos</option></select>
+            <select id="filterDue" aria-label="Filtrar por prazo"><option value="">Todos os prazos</option><option value="today">Vencem hoje</option><option value="late">Atrasadas</option></select>
+          </div>
+          <article class="card"><div id="taskList"></div></article>
+        </section>
+
+        <section class="page" id="page-units" data-admin>
+          <div class="page-heading"><div><h1>Unidades</h1><p>Cadastre as lojas e unidades administrativas da rede.</p></div><button class="btn btn-primary" id="addUnit">＋ Nova unidade</button></div>
+          <div class="department-cards" id="unitCards"></div>
+        </section>
+
+        <section class="page" id="page-departments" data-admin>
+          <div class="page-heading"><div><h1>Departamentos</h1><p>Organize as equipes da empresa.</p></div><button class="btn btn-primary" id="addDepartment">＋ Novo departamento</button></div>
+          <div class="department-cards" id="departmentCards"></div>
+        </section>
+
+        <section class="page" id="page-people" data-admin>
+          <div class="page-heading"><div><h1>Funcionários</h1><p>Cadastre e organize os integrantes da equipe.</p></div><button class="btn btn-primary" id="addPerson">＋ Novo funcionário</button></div>
+          <article class="card table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Departamento</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="peopleTable"></tbody></table></article>
+        </section>
+
+        <section class="page" id="page-reports">
+          <div class="page-heading"><div><h1>Relatórios</h1><p>Indicadores das tarefas disponíveis para seu perfil.</p></div></div>
+          <div class="report-grid" id="reportSummary"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="taskDialog" class="dialog" aria-labelledby="taskDialogTitle">
+    <form id="taskForm" method="dialog">
+      <div class="dialog-heading"><h2 id="taskDialogTitle">Nova tarefa</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="taskDialog">×</button></div>
+      <input type="hidden" id="taskId">
+      <label>Título da tarefa<input id="taskTitle" required maxlength="120" placeholder="Ex.: Conferir documentos"></label>
+      <label>Descrição<textarea id="taskDescription" rows="3" placeholder="Detalhes e orientações (opcional)"></textarea></label>
+      <div class="form-grid">
+        <label>Unidade<select id="taskUnit"></select></label>
+        <label>Departamento<select id="taskDepartment" required></select></label>
+        <label>Responsável<select id="taskPerson"><option value="">Não atribuído</option></select></label>
+        <label>Prazo<input id="taskDue" type="date"></label>
+        <label>Prioridade<select id="taskPriority"><option>Baixa</option><option selected>Média</option><option>Alta</option><option>Urgente</option></select></label>
+        <label>Status<select id="taskStatus"><option>Pendente</option><option>Em andamento</option><option>Concluída</option></select></label>
+      </div>
+      <fieldset id="cashChecklist" class="checklist" hidden>
+        <legend>Checklist de fechamento de caixa</legend>
+        <div id="cashChecklistItems"></div>
+      </fieldset>
+      <p id="taskError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="taskDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar tarefa</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="unitDialog" class="dialog" aria-labelledby="unitDialogTitle">
+    <form id="unitForm" method="dialog">
+      <div class="dialog-heading"><h2 id="unitDialogTitle">Nova unidade</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="unitDialog">×</button></div>
+      <input type="hidden" id="unitId">
+      <label>Nome da unidade<input id="unitName" required maxlength="100" placeholder="Ex.: Vila São Pedro"></label>
+      <label>Tipo<select id="unitType"><option value="store">Loja</option><option value="office">Administrativa</option></select></label>
+      <p id="unitError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="unitDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar unidade</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="departmentDialog" class="dialog" aria-labelledby="departmentDialogTitle">
+    <form id="departmentForm" method="dialog">
+      <div class="dialog-heading"><h2 id="departmentDialogTitle">Novo departamento</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="departmentDialog">×</button></div>
+      <input type="hidden" id="departmentId">
+      <label>Nome do departamento<input id="departmentName" required maxlength="70" placeholder="Ex.: Recursos Humanos"></label>
+      <label>Descrição<input id="departmentDescription" maxlength="140" placeholder="Descrição (opcional)"></label>
+      <p id="departmentError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="departmentDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="deleteDepartmentDialog" class="dialog" aria-labelledby="deleteDepartmentTitle">
+    <form id="deleteDepartmentForm" method="dialog">
+      <div class="dialog-heading"><h2 id="deleteDepartmentTitle">Excluir departamento</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="deleteDepartmentDialog">×</button></div>
+      <input type="hidden" id="deleteDepartmentId">
+      <p id="deleteDepartmentSummary"></p>
+      <label id="transferDepartmentLabel">Transferir vínculos para<select id="transferDepartment"></select></label>
+      <p id="deleteDepartmentError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="deleteDepartmentDialog" autofocus>Cancelar</button><button id="confirmDeleteDepartment" class="btn btn-primary" type="submit">Excluir departamento</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="personDialog" class="dialog" aria-labelledby="personDialogTitle">
+    <form id="personForm" method="dialog">
+      <div class="dialog-heading"><h2 id="personDialogTitle">Novo funcionário</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="personDialog">×</button></div>
+      <input type="hidden" id="personId">
+      <label>Nome completo<input id="personName" required maxlength="100"></label>
+      <label>E-mail<input id="personEmail" type="email" required maxlength="150"></label>
+      <div class="form-grid">
+        <label>Departamento<select id="personDepartment" required></select></label>
+        <label>Perfil<select id="personRole"><option>Funcionário</option><option>Gestor</option></select></label>
+      </div>
+      <p id="personError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="personDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

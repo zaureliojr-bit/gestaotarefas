@@ -1,0 +1,24 @@
+{
+  "name": "drogalink-tarefas",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-06",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "ACCESS_TEAM_URL": "",
+    "ACCESS_AUD": ""
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "PREENCHER_NOME_DO_D1",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_table": "tarefas_migrations"
+    }
+  ]
+}
