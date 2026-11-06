@@ -80,6 +80,18 @@ assert.equal((await cookieRequest(await token(users[0][0], { aud: ["outro"] })))
 assert.equal((await cookieRequest(await token(users[0][0], { exp: 1 }))).status, 401);
 assert.equal((await cookieRequest(disabled)).status, 403);
 assert.equal((await cookieRequest(office, disabled)).status, 403);
+assert.equal((await request(await token(users[0][0], { aud: env.ACCESS_AUD }))).status, 200);
+for (const [claims, stage] of [
+  [{ iss: "https://outra-equipe.cloudflareaccess.com" }, "EMISSOR"],
+  [{ aud: ["outra-aplicacao"] }, "AUD"],
+  [{ exp: 1 }, "VALIDADE"],
+  [{ email: undefined }, "IDENTIDADE"]
+]) {
+  const result = await request(await token(users[0][0], claims));
+  assert.equal(result.status, 401);
+  assert.match(result.body.error, new RegExp(`ACCESS-${stage}`));
+}
+assert.match((await cookieRequest(office.replace(/\.[^.]+$/, ".AAAA"))).body.error, /ACCESS-ASSINATURA/);
 
 const base = {
   departmentId: 1, title: "Caixa", description: "", status: "Pendente",
