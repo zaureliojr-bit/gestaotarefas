@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1749a3">
   <title>Drogalink | Gestão de Tarefas</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/drogalink-192.png">
+  <link rel="icon" href="/icons/drogalink-192.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -33,6 +36,10 @@
       <div class="sidebar-bottom">
         <div class="profile"><div class="avatar" id="accountAvatar" aria-hidden="true"></div><div><b id="accountName"></b><small id="accountRole"></small></div></div>
         <span class="demo-label">Dados compartilhados pela rede</span>
+        <div class="install-app">
+          <button class="btn btn-light" type="button" id="installApp" hidden>Instalar aplicativo</button>
+          <small id="installMessage" role="status" hidden></small>
+        </div>
         <div class="backup-actions" data-admin>
           <button class="btn btn-light" id="exportBackup">Exportar backup</button>
           <button class="btn btn-light" id="importBackup">Importar backup</button>
@@ -201,5 +208,6 @@
   </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script type="module" src="app.js"></script>
+  <script type="module" src="pwa.js"></script>
 </body>
 </html>
