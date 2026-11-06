@@ -12,7 +12,7 @@
     ]
   },
   "vars": {
-    "ACCESS_TEAM_URL": "",
+    "ACCESS_TEAM_URL": "https://zaureliojr.cloudflareaccess.com",
     "ACCESS_AUD": ""
   },
   "d1_databases": [
