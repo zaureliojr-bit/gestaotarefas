@@ -29,3 +29,5 @@
 .gate a{margin-left:12px;color:var(--blue)}
 .profile>div:last-child{min-width:0;overflow-wrap:anywhere}
 #unitCards code{overflow-wrap:anywhere}
+.install-app:has(button:not([hidden]), small:not([hidden])){margin:0 0 8px}
+.install-app small{display:block;margin-top:6px;color:var(--ink);font-size:12px;line-height:1.4}

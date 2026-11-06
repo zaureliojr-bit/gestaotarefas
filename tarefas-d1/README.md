@@ -83,3 +83,15 @@ de conflito, feche o formulário, sincronize, confira a alteração e repita.
 A geração do fechamento diário ocorre na primeira consulta ou gravação que
 processar o dia, usando o fuso de São Paulo. O módulo precisa de conexão para
 operar e não mantém dados da equipe no armazenamento local do navegador.
+
+## Instalar o aplicativo
+
+Abra o endereço publicado em um navegador comum e entre com sua conta.
+No Chrome ou Edge compatível, use **Instalar aplicativo** no menu do Drogalink
+ou a opção de instalação do navegador. No iPhone ou iPad, use o Safari e
+toque em **Compartilhar → Adicionar à Tela de Início**.
+
+O aplicativo precisa de internet para entrar e trabalhar com as tarefas.
+Depois de uma visita online, se o dispositivo estiver sem conexão, o ícone
+abre uma tela com **Tentar novamente**. O service worker guarda somente
+essa tela no cache. A API, as tarefas e os dados de login seguem online.
