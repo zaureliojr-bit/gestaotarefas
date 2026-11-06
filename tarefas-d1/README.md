@@ -11,9 +11,15 @@ API. A senha compartilhada do painel de pedidos segue no fluxo de pedidos.
 | `employee` | Atualiza o status e os checklists das tarefas atribuídas a si na unidade autorizada |
 
 O cadastro de funcionário liga a tarefa ao e-mail do login. O perfil no cadastro
-descreve o funcionário. A autorização é concedida separadamente em
-`tarefas_acessos` e na política do Access. Use contas de e-mail individuais e
-revogue as duas concessões quando alguém deixar a equipe.
+descreve o funcionário. Para gerenciar a autorização do aplicativo, entre como
+Escritório e abra **Usuários e acessos**. Use **Novo acesso** para cadastrar
+o e-mail e selecione perfil, unidade e situação. Em **Editar**, é possível
+alterar essas opções ou desativar o acesso sem excluir o cadastro. A própria
+conta fica protegida contra alterações nessa tela.
+
+O novo usuário também precisa estar na política do Cloudflare Access com o
+mesmo e-mail. Use contas individuais e revogue as duas concessões quando
+alguém deixar a equipe. O primeiro acesso de Escritório ainda é criado no D1.
 
 ## Validação local
 

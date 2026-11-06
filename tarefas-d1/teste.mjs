@@ -23,6 +23,7 @@ const DB = {
     function bind(...args) {
       return {
         first: async () => stmt.get(...args) ?? null,
+        all: async () => ({ results: stmt.all(...args) }),
         run: async () => ({ meta: { changes: Number(stmt.run(...args).changes) } })
       };
     }
@@ -160,6 +161,43 @@ assert.equal((await request(office, "state", "PUT", { revision: fullView.revisio
 const afterRename = (await request(newManager)).body;
 assert.equal(afterRename.data.units[0].name, "Nova Loja Renomeada");
 assert.deepEqual(afterRename.data.tasks, newView.data.tasks);
+
+assert.equal((await request(manager, "access-users")).status, 403);
+assert.equal((await request(employee, "access-users")).status, 403);
+const list = await request(office, "access-users");
+assert.equal(list.status, 200);
+assert.ok(list.body.users.some(user => user.email === users[0][0]));
+const access = { email: "  Novo@Example.com ", perfil: "employee", unidade: "vila-sao-pedro", ativo: 1 };
+assert.equal((await request(employee, "access-users", "POST", access)).status, 403);
+assert.equal((await request(office, "access-users", "POST", access, "https://fora.example")).status, 403);
+assert.equal((await request(office, "access-users", "POST", { ...access, unidade: "inexistente" })).status, 400);
+const created = await request(office, "access-users", "POST", access);
+assert.equal(created.status, 201);
+assert.equal(created.body.user.email, "novo@example.com");
+assert.equal((await request(office, "access-users", "POST", access)).status, 409);
+const newEmployee = await token(created.body.user.email);
+assert.equal((await request(newEmployee)).status, 200);
+const previous = created.body.user;
+assert.equal((await request(office, "access-users", "PATCH", {
+  ...previous, email: users[0][0], ativo: 0, anterior: previous
+})).status, 403);
+const changed = await request(office, "access-users", "PATCH", {
+  ...previous, perfil: "manager", unidade: newUnit.id, anterior: previous
+});
+assert.equal(changed.status, 200);
+assert.deepEqual((await request(newEmployee)).body.data.units, afterRename.data.units);
+assert.equal((await request(office, "access-users", "PATCH", {
+  ...previous, ativo: 0, anterior: previous
+})).status, 409);
+const revoked = await request(office, "access-users", "PATCH", {
+  ...changed.body.user, ativo: 0, anterior: changed.body.user
+});
+assert.equal(revoked.status, 200);
+assert.equal((await request(newEmployee)).status, 403);
+assert.equal((await request(office, "access-users", "PATCH", {
+  ...revoked.body.user, ativo: 1, anterior: revoked.body.user
+})).status, 200);
+assert.equal((await request(newEmployee)).status, 200);
 
 assert.match((await request(await token(users[0][0], {}, "ausente"))).body.error, /ACCESS-CHAVE-ID/);
 env.ACCESS_TEAM_URL = "https://outra-equipe.cloudflareaccess.com";

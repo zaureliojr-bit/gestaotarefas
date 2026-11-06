@@ -199,16 +199,66 @@ async function body(request) {
   }
   try {
     const result = JSON.parse(text + parser.decode());
-    if (!result || !Number.isSafeInteger(result.revision)) throw new Error();
+    if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error();
     return result;
   } catch {
-    throw new HttpError(400, "Dados ou revisão inválidos.");
+    throw new HttpError(400, "Dados inválidos.");
   }
+}
+
+async function manageAccess(request, db, viewer) {
+  if (viewer.role !== "office") throw new HttpError(403, "A gestão de acessos é reservada ao escritório.");
+  if (request.method === "GET") {
+    const { results } = await db.prepare(
+      "SELECT email, perfil, unidade, ativo FROM tarefas_acessos ORDER BY email"
+    ).all();
+    return json({ users: results });
+  }
+
+  const { email: input, perfil, unidade, ativo, anterior } = await body(request);
+  const email = typeof input === "string" ? input.trim().toLowerCase() : "";
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpError(400, "Informe um e-mail válido.");
+  }
+  if (email === viewer.email) throw new HttpError(403, "Você não pode alterar seu próprio acesso.");
+  if (!["office", "manager", "employee"].includes(perfil) || ![0, 1].includes(ativo)) {
+    throw new HttpError(400, "Escolha um perfil e uma situação válidos.");
+  }
+  if (perfil === "office" ? unidade !== null : typeof unidade !== "string" || !unidade) {
+    throw new HttpError(400, "Escolha uma unidade para gestor ou colaborador.");
+  }
+  if (unidade !== null) {
+    const { data } = await load(db);
+    if (!data.units.some(unit => unit.id === unidade)) throw new HttpError(400, "Unidade não cadastrada.");
+  }
+
+  // Revalida o privilégio na própria gravação para evitar que dois administradores se desativem ao mesmo tempo.
+  const authorized = "EXISTS (SELECT 1 FROM tarefas_acessos WHERE email = ? AND perfil = 'office' AND ativo = 1)";
+  if (request.method === "POST") {
+    const result = await db.prepare(
+      `INSERT INTO tarefas_acessos (email, perfil, unidade, ativo)
+       SELECT ?, ?, ?, ? WHERE ${authorized}
+       ON CONFLICT(email) DO NOTHING`
+    ).bind(email, perfil, unidade, ativo, viewer.email).run();
+    if (!result.meta.changes) throw new HttpError(409, "Este e-mail já está cadastrado ou sua permissão mudou. Atualize a lista.");
+    return json({ user: { email, perfil, unidade, ativo } }, 201);
+  }
+
+  if (!anterior || !["office", "manager", "employee"].includes(anterior.perfil) ||
+      (anterior.unidade !== null && typeof anterior.unidade !== "string") ||
+      ![0, 1].includes(anterior.ativo)) throw new HttpError(400, "Atualize a lista e reabra a edição.");
+  const result = await db.prepare(
+    `UPDATE tarefas_acessos SET perfil = ?, unidade = ?, ativo = ?
+     WHERE email = ? AND perfil = ? AND unidade IS ? AND ativo = ? AND ${authorized}`
+  ).bind(perfil, unidade, ativo, email, anterior.perfil, anterior.unidade, anterior.ativo, viewer.email).run();
+  if (!result.meta.changes) throw new HttpError(409, "O acesso foi alterado em outra sessão ou sua permissão mudou. Atualize a lista.");
+  return json({ user: { email, perfil, unidade, ativo } });
 }
 
 async function writeState(request, db, viewer, taskId) {
   if (taskId === null && viewer.role !== "office") throw new HttpError(403, "Alteração reservada ao escritório.");
   const incoming = await body(request);
+  if (!Number.isSafeInteger(incoming.revision)) throw new HttpError(400, "Dados ou revisão inválidos.");
   const current = await load(db);
   checkUnitAccess(current.data, viewer);
   if (incoming.revision !== current.revision) throw new HttpError(409, "Os dados mudaram. Feche a edição, sincronize e tente novamente.");
@@ -263,6 +313,9 @@ export default {
     if (!path.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
       const viewer = await getViewer(request, env);
+      if (path === "/api/access-users" && ["GET", "POST", "PATCH"].includes(request.method)) {
+        return await manageAccess(request, env.DB, viewer);
+      }
       if (path === "/api/state" && request.method === "GET") {
         const current = await readState(env.DB, viewer);
         return json(snapshot(current.data, current.revision, viewer));
