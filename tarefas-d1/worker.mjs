@@ -21,7 +21,8 @@ function json(data, status = 200) {
 
 function decodePart(value) {
   if (!/^[a-zA-Z0-9_-]+$/.test(value)) throw new Error("Base64url inválido");
-  return Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")), c => c.charCodeAt(0));
 }
 
 async function publicKey(team, kid) {
@@ -55,6 +56,7 @@ async function verifiedEmail(request, env) {
   if (!token) {
     throw new HttpError(401, "O Cloudflare Access não enviou uma sessão ao painel. Clique em Sair e entre novamente.");
   }
+  let stage = "FORMATO";
   try {
     if (token.length > 16384) throw new Error("Token inválido");
     const parts = token.split(".");
@@ -63,16 +65,24 @@ async function verifiedEmail(request, env) {
     const { alg, kid } = JSON.parse(decoder.decode(decodePart(header)));
     const { aud, iss, exp, nbf, email } = JSON.parse(decoder.decode(decodePart(payload)));
     const now = Date.now() / 1000;
-    if (alg !== "RS256" || typeof kid !== "string" || iss !== team ||
-        !Array.isArray(aud) || !aud.includes(env.ACCESS_AUD) || !Number.isFinite(exp) || exp <= now ||
-        (nbf != null && (!Number.isFinite(nbf) || nbf > now)) ||
-        typeof email !== "string" || !email.includes("@")) throw new Error("Credencial inválida");
+    if (alg !== "RS256" || typeof kid !== "string") throw new Error();
+    stage = "EMISSOR";
+    if (iss !== team) throw new Error();
+    stage = "AUD";
+    if (aud !== env.ACCESS_AUD && !(Array.isArray(aud) && aud.includes(env.ACCESS_AUD))) throw new Error();
+    stage = "VALIDADE";
+    if (!Number.isFinite(exp) || exp <= now ||
+        (nbf != null && (!Number.isFinite(nbf) || nbf > now))) throw new Error();
+    stage = "CHAVE";
     const key = await publicKey(team, kid);
+    stage = "ASSINATURA";
     const valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, decodePart(signature), encoder.encode(header + "." + payload));
-    if (!valid) throw new Error("Assinatura inválida");
+    if (!valid) throw new Error();
+    stage = "IDENTIDADE";
+    if (typeof email !== "string" || !email.trim().includes("@")) throw new Error();
     return email.trim().toLowerCase();
   } catch {
-    throw new HttpError(401, "Entre novamente com sua conta para acessar as tarefas.");
+    throw new HttpError(401, `O painel não conseguiu validar a sessão do Cloudflare Access (ACCESS-${stage}).`);
   }
 }
 
