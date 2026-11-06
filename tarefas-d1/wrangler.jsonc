@@ -13,7 +13,7 @@
   },
   "vars": {
     "ACCESS_TEAM_URL": "https://zaureliojr.cloudflareaccess.com",
-    "ACCESS_AUD": ""
+    "ACCESS_AUD": "b984aaeafd474ef49550c527a14ac79e77e571d4163ec46aa127aeaf28092289"
   },
   "d1_databases": [
     {
@@ -21,6 +21,12 @@
       "database_name": "drogalink-tarefas",
       "database_id": "2280292d-befb-4b81-950a-745a55769d65",
       "migrations_table": "tarefas_migrations"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "tarefas.drogalink.com.br",
+      "custom_domain": true
     }
   ]
 }
