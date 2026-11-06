@@ -11,6 +11,7 @@ let revision;
 let saving = false;
 let loading = false;
 const isAdmin = () => viewer?.role === "office";
+const accessRoles = { office: "Escritório", manager: "Gestor de unidade", employee: "Colaborador" };
 
 function showMessage(id, message) {
   const el = $(id);
@@ -32,15 +33,17 @@ function applySnapshot(snapshot) {
   revision = snapshot.revision;
   viewer = snapshot.viewer;
   $("accountName").textContent = viewer.email;
-  $("accountRole").textContent = {
-    office: "Escritório", manager: "Gestor de unidade", employee: "Colaborador"
-  }[viewer.role];
+  $("accountRole").textContent = accessRoles[viewer.role];
   $("greeting").textContent = "Visão geral das tarefas";
   $("accountAvatar").textContent = viewer.email.slice(0, 2).toUpperCase();
   document.querySelectorAll("[data-admin]").forEach(el => { el.hidden = !isAdmin(); });
   $("panel").hidden = false;
   $("syncGate").hidden = true;
-  if (!isAdmin() && document.querySelector(".page.active[data-admin]")) showPage("overview");
+  if (!isAdmin()) {
+    accessUsers = [];
+    $("accessTable").replaceChildren();
+    if (document.querySelector(".page.active[data-admin]")) showPage("overview");
+  }
   render();
 }
 
@@ -117,10 +120,11 @@ const nextAction = {
 function showPage(name) {
   document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === "page-" + name));
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.toggle("active", button.dataset.page === name));
-  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", reports: "Relatórios" };
+  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios" };
   $("pageTitle").textContent = titles[name];
   $("breadcrumb").textContent = titles[name];
   $("sidebar").classList.remove("open");
+  if (name === "access") loadAccessUsers();
 }
 
 document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => showPage(b.dataset.page));
@@ -317,6 +321,96 @@ function renderPeople() {
   ).join("") || '<tr><td colspan="5" class="empty">Nenhum funcionário cadastrado.</td></tr>';
 }
 
+let accessUsers = [];
+let editingAccess;
+let loadingAccess = false;
+
+function renderAccessUsers() {
+  $("accessTable").innerHTML = accessUsers.map(user => `<tr>
+    <td><b>${esc(user.email)}</b></td><td>${esc(accessRoles[user.perfil])}</td>
+    <td>${esc(user.unidade === null ? "Todas" : unitName(user.unidade))}</td>
+    <td>${user.ativo ? "Ativo" : "Desativado"}</td>
+    <td>${user.email.toLowerCase() === viewer.email ? "Sua conta" :
+      `<button class="small-btn" type="button" data-access-email="${esc(user.email)}">Editar</button>`}</td>
+  </tr>`).join("") || '<tr><td colspan="5" class="empty">Nenhum acesso cadastrado.</td></tr>';
+}
+
+async function loadAccessUsers() {
+  if (!isAdmin() || loadingAccess) return;
+  loadingAccess = true;
+  showMessage("accessListError", "");
+  try {
+    const { users } = await api("access-users");
+    if (!isAdmin()) return;
+    accessUsers = users;
+    renderAccessUsers();
+  } catch (error) {
+    accessUsers = [];
+    renderAccessUsers();
+    showMessage("accessListError", error.message);
+  } finally {
+    loadingAccess = false;
+  }
+}
+
+function updateAccessUnitField() {
+  const office = $("accessRole").value === "office";
+  $("accessUnitLabel").hidden = office;
+  $("accessUnit").disabled = office;
+  $("accessUnit").required = !office;
+}
+
+function openAccess(user) {
+  if (!isAdmin() || loadingAccess) return;
+  editingAccess = user;
+  $("accessDialogTitle").textContent = user ? "Editar acesso" : "Novo acesso";
+  $("accessEmail").value = user?.email ?? "";
+  $("accessEmail").readOnly = Boolean(user);
+  $("accessRole").value = user?.perfil ?? "employee";
+  $("accessUnit").value = user?.unidade ?? "";
+  $("accessActive").value = String(user?.ativo ?? 1);
+  updateAccessUnitField();
+  showMessage("accessError", "");
+  $("accessDialog").showModal();
+}
+
+$("addAccess").onclick = () => openAccess();
+$("refreshAccess").onclick = loadAccessUsers;
+$("accessRole").onchange = updateAccessUnitField;
+$("accessTable").onclick = event => {
+  const email = event.target.closest("[data-access-email]")?.dataset.accessEmail;
+  const user = accessUsers.find(row => row.email === email);
+  if (user) openAccess(user);
+};
+
+$("accessForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const submit = $("saveAccess");
+  if (!isAdmin() || submit.disabled) return;
+  const perfil = $("accessRole").value;
+  const payload = {
+    email: $("accessEmail").value.trim(), perfil,
+    unidade: perfil === "office" ? null : $("accessUnit").value,
+    ativo: Number($("accessActive").value), anterior: editingAccess
+  };
+  submit.disabled = true;
+  showMessage("accessError", "");
+  try {
+    await api("access-users", {
+      method: editingAccess ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    $("accessDialog").close();
+    notify("Acesso salvo.");
+    await loadAccessUsers();
+  } catch (error) {
+    showMessage("accessError", error.message);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
 $("peopleTable").onclick = event => {
   const button = event.target.closest("button");
   if (!button) return;
@@ -371,6 +465,7 @@ function populateSelects() {
   options("filterUnit", '<option value="">Todas as unidades</option>' + units +
     (isAdmin() ? '<option value="none">Sem unidade</option>' : ""));
   options("taskUnit", '<option value="">Sem unidade</option>' + units);
+  options("accessUnit", '<option value="">Selecione uma unidade</option>' + units);
 }
 
 function render() {

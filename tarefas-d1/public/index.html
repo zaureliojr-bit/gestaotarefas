@@ -27,6 +27,7 @@
         <button class="nav-btn" data-page="units" data-admin><span>⌂</span> Unidades</button>
         <button class="nav-btn" data-page="departments" data-admin><span>▤</span> Departamentos</button>
         <button class="nav-btn" data-page="people" data-admin><span>♙</span> Funcionários</button>
+        <button class="nav-btn" data-page="access" data-admin><span>▣</span> Usuários e acessos</button>
         <button class="nav-btn" data-page="reports"><span>▥</span> Relatórios</button>
       </nav>
       <div class="sidebar-bottom">
@@ -96,6 +97,16 @@
           <article class="card table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Departamento</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="peopleTable"></tbody></table></article>
         </section>
 
+        <section class="page" id="page-access" data-admin>
+          <div class="page-heading"><div><h1>Usuários e acessos</h1><p>Gerencie quem pode acessar o Drogalink e quais unidades pode ver.</p></div><div class="person-actions"><button class="btn btn-light" id="refreshAccess">Atualizar lista</button><button class="btn btn-primary" id="addAccess">＋ Novo acesso</button></div></div>
+          <article class="card activity-card">
+            <h2>Entrada com Cloudflare Access</h2>
+            <p>Para novos usuários, inclua o mesmo e-mail na política de acesso da Cloudflare. Para colaboradores, cadastre também o e-mail em Funcionários para poder atribuir tarefas.</p>
+          </article>
+          <p id="accessListError" class="form-error" role="alert" hidden></p>
+          <article class="card table-wrap"><table><thead><tr><th>E-mail</th><th>Perfil</th><th>Unidade</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="accessTable"></tbody></table></article>
+        </section>
+
         <section class="page" id="page-reports">
           <div class="page-heading"><div><h1>Relatórios</h1><p>Indicadores das tarefas disponíveis para seu perfil.</p></div></div>
           <div class="report-grid" id="reportSummary"></div>
@@ -103,6 +114,20 @@
       </div>
     </main>
   </div>
+
+  <dialog id="accessDialog" class="dialog" aria-labelledby="accessDialogTitle">
+    <form id="accessForm" method="dialog">
+      <div class="dialog-heading"><h2 id="accessDialogTitle">Novo acesso</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="accessDialog">×</button></div>
+      <label>E-mail<input id="accessEmail" type="email" required maxlength="254" placeholder="nome@exemplo.com"></label>
+      <div class="form-grid">
+        <label>Perfil<select id="accessRole"><option value="employee">Colaborador</option><option value="manager">Gestor de unidade</option><option value="office">Escritório</option></select></label>
+        <label id="accessUnitLabel">Unidade<select id="accessUnit"></select></label>
+        <label>Situação<select id="accessActive"><option value="1">Ativo</option><option value="0">Desativado</option></select></label>
+      </div>
+      <p id="accessError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="accessDialog">Cancelar</button><button id="saveAccess" class="btn btn-primary" type="submit">Salvar acesso</button></div>
+    </form>
+  </dialog>
 
   <dialog id="taskDialog" class="dialog" aria-labelledby="taskDialogTitle">
     <form id="taskForm" method="dialog">
