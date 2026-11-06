@@ -39,16 +39,26 @@ async function publicKey(team, kid) {
   return crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
 }
 
+function accessToken(request) {
+  const assertion = request.headers.get("Cf-Access-Jwt-Assertion");
+  if (assertion) return assertion;
+  const cookie = request.headers.get("Cookie") ?? "";
+  return /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(cookie)?.[1] ?? "";
+}
+
 async function verifiedEmail(request, env) {
   const team = env.ACCESS_TEAM_URL;
   if (!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(team ?? "") || !env.ACCESS_AUD) {
     throw new HttpError(503, "Configure o login do painel.");
   }
+  const token = accessToken(request);
+  if (!token) {
+    throw new HttpError(401, "O Cloudflare Access não enviou uma sessão ao painel. Clique em Sair e entre novamente.");
+  }
   try {
-    const token = request.headers.get("Cf-Access-Jwt-Assertion") ?? "";
     if (token.length > 16384) throw new Error("Token inválido");
     const parts = token.split(".");
-    if (parts.length !== 3) throw new Error("Token ausente");
+    if (parts.length !== 3) throw new Error("Token inválido");
     const [header, payload, signature] = parts;
     const { alg, kid } = JSON.parse(decoder.decode(decodePart(header)));
     const { aud, iss, exp, nbf, email } = JSON.parse(decoder.decode(decodePart(payload)));

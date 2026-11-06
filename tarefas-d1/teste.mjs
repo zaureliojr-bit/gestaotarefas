@@ -52,8 +52,8 @@ async function token(email, overrides = {}) {
 
 const [office, manager, employee, disabled] = await Promise.all(users.map(([email]) => token(email)));
 const domain = "https://tarefas.example.com";
-async function request(auth, path = "state", method = "GET", payload, origin = domain) {
-  const headers = { Origin: origin };
+async function request(auth, path = "state", method = "GET", payload, origin = domain, extraHeaders = {}) {
+  const headers = { Origin: origin, ...extraHeaders };
   if (auth) headers["Cf-Access-Jwt-Assertion"] = auth;
   if (payload) headers["Content-Type"] = "application/json";
   const response = await worker.fetch(new Request(domain + "/api/" + path, {
@@ -70,6 +70,16 @@ assert.equal((await request(office.replace(/\.[^.]+$/, ".AAAA"))).status, 401);
 assert.equal((await request(disabled)).status, 403);
 assert.equal((await request(await token("fora@example.com"))).status, 403);
 assert.equal((await request(office)).body.revision, 0);
+
+const cookieRequest = (value, assertion = null) => request(assertion, "state", "GET", undefined, domain, {
+  Cookie: `preferencia=1; CF_Authorization=${value}; outro=2`
+});
+assert.equal((await cookieRequest(office)).status, 200);
+assert.equal((await cookieRequest(office.replace(/\.[^.]+$/, ".AAAA"))).status, 401);
+assert.equal((await cookieRequest(await token(users[0][0], { aud: ["outro"] }))).status, 401);
+assert.equal((await cookieRequest(await token(users[0][0], { exp: 1 }))).status, 401);
+assert.equal((await cookieRequest(disabled)).status, 403);
+assert.equal((await cookieRequest(office, disabled)).status, 403);
 
 const base = {
   departmentId: 1, title: "Caixa", description: "", status: "Pendente",
