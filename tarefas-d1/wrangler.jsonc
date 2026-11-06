@@ -7,7 +7,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "vars": {
     "ACCESS_TEAM_URL": "",
@@ -16,8 +18,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "PREENCHER_NOME_DO_D1",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "drogalink-tarefas",
+      "database_id": "2280292d-befb-4b81-950a-745a55769d65",
       "migrations_table": "tarefas_migrations"
     }
   ]
