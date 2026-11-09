@@ -237,11 +237,11 @@ console.log("OK: autenticação, migração, unidades novas e renomeadas, isolam
 const officeBridge = await token(users[0][0]);
 const makeLink = email => request(officeBridge, "auth/password-link", "POST", { email });
 const setPassword = (token, password) => request(null, "auth/password", "POST", { token, password });
-const password = "teste12345";
+const password = "987654321";
 const email = networkAccount.email;
 const firstLink = await makeLink(email);
 assert.equal(firstLink.status, 200);
-assert.equal((await setPassword(firstLink.body.token, "teste1234")).status, 400);
+assert.equal((await setPassword(firstLink.body.token, "87654321")).status, 400);
 assert.equal((await setPassword(firstLink.body.token, password)).status, 200);
 assert.equal((await setPassword(firstLink.body.token, password)).status, 400);
 const account = sql.prepare("SELECT senha_hash, senha_token FROM tarefas_acessos WHERE email = ?").get(email);
