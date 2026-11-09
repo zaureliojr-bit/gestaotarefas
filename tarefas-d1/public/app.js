@@ -5,6 +5,12 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 }[c]));
 
+const passwordFragment = /^#senha=([a-f0-9]{64})$/.exec(location.hash);
+let passwordToken = passwordFragment?.[1];
+if (passwordToken) history.replaceState(null, "", location.pathname + location.search);
+let internalLogin = false;
+let awaitingLogin = Boolean(passwordToken);
+
 let data;
 let viewer;
 let revision;
@@ -24,7 +30,11 @@ async function api(path, options) {
     cache: "no-store", redirect: "error", ...options
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Falha ao sincronizar.");
+  if (!response.ok) {
+    const error = new Error(result.error || "Falha ao sincronizar.");
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -47,8 +57,14 @@ function applySnapshot(snapshot) {
   render();
 }
 
+function postAuth(route, data) {
+  return api("auth/" + route, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+  });
+}
+
 async function sync() {
-  if (saving || loading || document.querySelector("dialog[open]")) return;
+  if (awaitingLogin || saving || loading || document.querySelector("dialog[open]")) return;
   loading = true;
   try {
     applySnapshot(await api("state"));
@@ -57,6 +73,12 @@ async function sync() {
     // Oculta os dados em tela caso a sessão ou a concessão tenha expirado.
     $("panel").hidden = true;
     $("syncGate").hidden = false;
+    if (internalLogin && error.status === 401) {
+      $("loginForm").hidden = false;
+      data = viewer = revision = undefined;
+      $("accessTable").replaceChildren();
+      accessUsers = [];
+    }
     showMessage("initialError", error.message || "Acesse novamente com seu login.");
   } finally {
     loading = false;
@@ -331,7 +353,8 @@ function renderAccessUsers() {
     <td>${esc(user.unidade === null ? "Todas" : unitName(user.unidade))}</td>
     <td>${user.ativo ? "Ativo" : "Desativado"}</td>
     <td>${user.email.toLowerCase() === viewer.email ? "Sua conta" :
-      `<button class="small-btn" type="button" data-access-email="${esc(user.email)}">Editar</button>`}</td>
+      `<button class="small-btn" type="button" data-access-email="${esc(user.email)}">Editar</button>`}
+      ${user.ativo ? `<button class="small-btn" type="button" data-password-email="${esc(user.email)}">Gerar link de senha</button>` : ""}</td>
   </tr>`).join("") || '<tr><td colspan="5" class="empty">Nenhum acesso cadastrado.</td></tr>';
 }
 
@@ -381,7 +404,25 @@ function openAccess(user) {
 $("addAccess").onclick = () => openAccess();
 $("refreshAccess").onclick = loadAccessUsers;
 $("accessRole").onchange = updateAccessUnitField;
-$("accessTable").onclick = event => {
+$("accessTable").onclick = async event => {
+  const linkButton = event.target.closest("[data-password-email]");
+  if (linkButton && isAdmin()) {
+    linkButton.disabled = true;
+    const email = linkButton.dataset.passwordEmail;
+    try {
+      const { token } = await postAuth("password-link", { email });
+      const link = new URL("/", location.origin);
+      link.hash = "senha=" + token;
+      $("passwordLink").value = link.href;
+      $("passwordLinkHelp").textContent = `Compartilhe este link individualmente com ${email}. Ele vale por 1 hora e funciona uma vez.`;
+      $("passwordLinkDialog").showModal();
+    } catch (error) {
+      showMessage("accessListError", error.message);
+    } finally {
+      linkButton.disabled = false;
+    }
+    return;
+  }
   const email = event.target.closest("[data-access-email]")?.dataset.accessEmail;
   const user = accessUsers.find(row => row.email === email);
   if (user) openAccess(user);
@@ -723,8 +764,79 @@ document.querySelectorAll("[data-close]").forEach(b => b.onclick = () => $(b.dat
 $("searchTasks").addEventListener("input", renderTasks);
 ["filterStatus", "filterDepartment", "filterDue"].forEach(id => $(id).addEventListener("change", renderTasks));
 $("filterUnit").addEventListener("change", render);
-$("retrySync").onclick = sync;
 $("syncNow").onclick = sync;
 document.addEventListener("visibilitychange", () => { if (!document.hidden) sync(); });
 setInterval(() => { if (!document.hidden) sync(); }, 15000);
-sync();
+$("passwordLinkDialog").addEventListener("close", () => { $("passwordLink").value = ""; });
+$("copyPasswordLink").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("passwordLink").value);
+    notify("Link copiado.");
+  } catch {
+    $("passwordLink").select();
+  }
+};
+
+for (const form of [$("loginForm"), $("passwordForm")]) {
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = form.querySelector("button[type=submit]");
+    if (button.disabled) return;
+    const fields = new FormData(form);
+    const password = fields.get("password");
+    const setting = form.id === "passwordForm";
+    if (setting && password !== fields.get("confirmation")) {
+      showMessage("initialError", "As senhas precisam ser iguais.");
+      return;
+    }
+    button.disabled = true;
+    try {
+      if (setting) {
+        await postAuth("password", { password, token: passwordToken });
+        passwordToken = null;
+        form.hidden = true;
+        $("loginForm").hidden = false;
+        showMessage("initialError", "Senha definida. Entre com seu e-mail e senha.");
+      } else {
+        await postAuth("login", { email: fields.get("email"), password });
+        awaitingLogin = false;
+        await sync();
+      }
+      form.reset();
+    } catch (error) {
+      showMessage("initialError", error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+document.querySelectorAll("[data-logout]").forEach(button => {
+  button.onclick = async () => {
+    button.disabled = true;
+    try {
+      if (internalLogin || viewer?.auth === "internal") await postAuth("logout", {});
+      location.assign(internalLogin ? "/" : "/cdn-cgi/access/logout");
+    } catch (error) {
+      showMessage(viewer ? "storageWarning" : "initialError", error.message);
+      button.disabled = false;
+    }
+  };
+});
+
+async function start() {
+  try {
+    internalLogin = (await api("auth/mode")).internal;
+    if (passwordToken) {
+      $("passwordForm").hidden = false;
+      $("retrySync").hidden = true;
+      showMessage("initialError", "Defina sua senha para o Drogalink Tarefas.");
+    } else if (!awaitingLogin) {
+      await sync();
+    }
+  } catch (error) {
+    showMessage("initialError", error.message);
+  }
+}
+$("retrySync").onclick = start;
+start();

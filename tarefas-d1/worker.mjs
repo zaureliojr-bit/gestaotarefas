@@ -1,3 +1,4 @@
+import { handleAuth, sessionViewer } from "./auth.mjs";
 import { normalize, generateCashTasks, localDay, STATUSES, CHECKLIST } from "./public/model.mjs";
 
 const MAX_BYTES = 512 * 1024;
@@ -116,6 +117,11 @@ async function verifiedEmail(request, env) {
 }
 
 async function getViewer(request, env) {
+  if (env.AUTH_MODE === "internal" || request.headers.get("Cookie")?.includes("__Host-drogalink-tarefas=")) {
+    const viewer = await sessionViewer(request, env.DB);
+    if (viewer) return viewer;
+    if (env.AUTH_MODE === "internal") throw new HttpError(401, "Entre com seu e-mail e senha.");
+  }
   const email = await verifiedEmail(request, env);
   const row = await env.DB.prepare(
     "SELECT perfil, unidade FROM tarefas_acessos WHERE email = ? AND ativo = 1"
@@ -251,9 +257,12 @@ async function manageAccess(request, db, viewer) {
       (anterior.unidade !== null && typeof anterior.unidade !== "string") ||
       ![0, 1].includes(anterior.ativo)) throw new HttpError(400, "Atualize a lista e reabra a edição.");
   const result = await db.prepare(
-    `UPDATE tarefas_acessos SET perfil = ?, unidade = ?, ativo = ?
+    `UPDATE tarefas_acessos SET perfil = ?, unidade = ?, ativo = ?,
+         sessao_versao = sessao_versao + (ativo <> ?),
+         senha_token = CASE WHEN ativo <> ? THEN NULL ELSE senha_token END,
+         senha_token_expira = CASE WHEN ativo <> ? THEN NULL ELSE senha_token_expira END
      WHERE email = ? AND perfil = ? AND unidade IS ? AND ativo = ? AND ${authorized}`
-  ).bind(perfil, unidade, ativo, email, anterior.perfil, anterior.unidade, anterior.ativo, viewer.email).run();
+  ).bind(perfil, unidade, ativo, ativo, ativo, ativo, email, anterior.perfil, anterior.unidade, anterior.ativo, viewer.email).run();
   if (!result.meta.changes) throw new HttpError(409, "O acesso foi alterado em outra sessão ou sua permissão mudou. Atualize a lista.");
   return json({ user: { email, perfil, unidade, ativo } });
 }
@@ -315,6 +324,12 @@ export default {
     const path = new URL(request.url).pathname;
     if (!path.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
+      if (path === "/api/auth/mode" && request.method === "GET") {
+        return json({ internal: env.AUTH_MODE === "internal" });
+      }
+      if (request.method === "POST" && ["/api/auth/login", "/api/auth/logout", "/api/auth/password", "/api/auth/password-link"].includes(path)) {
+        return await handleAuth(request, env.DB, path, { body, json, HttpError, getViewer: () => getViewer(request, env) });
+      }
       const viewer = await getViewer(request, env);
       if (path === "/api/access-users" && ["GET", "POST", "PATCH"].includes(request.method)) {
         return await manageAccess(request, env.DB, viewer);

@@ -102,3 +102,32 @@ O aplicativo precisa de internet para entrar e trabalhar com as tarefas.
 Depois de uma visita online, se o dispositivo estiver sem conexão, o ícone
 abre uma tela com **Tentar novamente**. O service worker guarda somente
 essa tela no cache. A API, as tarefas e os dados de login seguem online.
+
+## Migrar para login interno
+
+1. Em homologação, use um D1 separado com contas de teste e valide a ativação,
+   o login e a atualização de tarefas. Confirme que a derivação de senha
+   funciona dentro do limite de CPU do plano do Worker.
+2. Em produção, aplique as migrações pendentes a partir de `tarefas-d1` com
+   `npx wrangler d1 migrations apply DB --remote` antes do deploy. Publique
+   inicialmente com a política do Cloudflare Access ativa e sem `AUTH_MODE`.
+3. Em **Usuários e acessos**, use **Gerar link de senha** para uma conta
+   ativa de Escritório e outra de Gestor de rede. Entregue os links
+   individualmente. Cada link expira em uma hora e é de uso único.
+   Ao definir a senha pelo link, o usuário já pode testá-la pelo formulário
+   de login. A redefinição invalida as sessões anteriores.
+4. Depois de validar as duas contas, configure `AUTH_MODE=internal` no Worker
+   e publique. Esse modo exige sessão do Drogalink para todas as rotas
+   protegidas. Retire a proteção do Cloudflare Access para o hostname de
+   tarefas depois de confirmar que o modo interno está ativo. Mantenha a
+   política anterior disponível para recuperação.
+5. Teste em janela anônima. Confirme que uma conta sem sessão não acessa a
+   API, que Escritório gerencia usuários e que Gestor de rede enxerga todas
+   as unidades com a gestão de usuários bloqueada.
+
+Quando alguém esquecer a senha, confirme sua identidade e gere um novo link
+em **Usuários e acessos**. O painel exibe o link para entrega individual.
+Desativar um acesso invalida a sessão e qualquer link pendente.
+
+Para reverter, reative a proteção do Cloudflare Access antes de retirar
+`AUTH_MODE=internal`. Os perfis continuam na mesma tabela do D1.

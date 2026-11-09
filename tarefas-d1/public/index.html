@@ -14,8 +14,19 @@
   <section id="syncGate" class="card gate">
     <h1>Drogalink · Tarefas</h1>
     <p id="initialError" role="status">Conectando ao painel da rede…</p>
+    <form id="loginForm" class="auth-form" hidden>
+      <label>E-mail<input name="email" type="email" required maxlength="254" autocomplete="username"></label>
+      <label>Senha<input name="password" type="password" required maxlength="128" autocomplete="current-password"></label>
+      <p>Esqueceu a senha? Peça ao Escritório um link de recuperação.</p>
+      <button class="btn btn-primary" type="submit">Entrar</button>
+    </form>
+    <form id="passwordForm" class="auth-form" hidden>
+      <label>Nova senha<input name="password" type="password" required minlength="15" maxlength="128" autocomplete="new-password"></label>
+      <label>Confirme a senha<input name="confirmation" type="password" required minlength="15" maxlength="128" autocomplete="new-password"></label>
+      <button class="btn btn-primary" type="submit">Salvar senha</button>
+    </form>
     <button id="retrySync" class="btn btn-primary">Tentar novamente</button>
-    <a href="/cdn-cgi/access/logout">Sair</a>
+    <button type="button" class="btn btn-light" data-logout>Sair</button>
   </section>
   <div class="app-shell" id="panel" hidden>
     <aside class="sidebar" id="sidebar">
@@ -52,7 +63,7 @@
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu">☰</button>
         <div><strong id="pageTitle">Visão geral</strong><small>Painel administrativo / <span id="breadcrumb">Visão geral</span></small></div>
-        <div class="top-user"><button class="btn btn-light" id="syncNow">Sincronizar</button><a href="/cdn-cgi/access/logout">Sair</a></div>
+        <div class="top-user"><button class="btn btn-light" id="syncNow">Sincronizar</button><button type="button" class="btn btn-light" data-logout>Sair</button></div>
       </header>
 
       <div class="content">
@@ -134,6 +145,13 @@
       <p id="accessError" class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="accessDialog">Cancelar</button><button id="saveAccess" class="btn btn-primary" type="submit">Salvar acesso</button></div>
     </form>
+  </dialog>
+
+  <dialog id="passwordLinkDialog" class="dialog" aria-labelledby="passwordLinkTitle">
+    <div class="dialog-heading"><h2 id="passwordLinkTitle">Link de senha</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="passwordLinkDialog">×</button></div>
+    <p id="passwordLinkHelp"></p>
+    <label>Link<input id="passwordLink" readonly autocomplete="off"></label>
+    <div class="dialog-actions"><button type="button" class="btn btn-primary" id="copyPasswordLink">Copiar link</button></div>
   </dialog>
 
   <dialog id="taskDialog" class="dialog" aria-labelledby="taskDialogTitle">
