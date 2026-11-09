@@ -1,3 +1,4 @@
+import { handleAuth, sessionViewer } from "./auth.mjs";
 import { normalize, generateCashTasks, localDay, STATUSES, CHECKLIST } from "./public/model.mjs";
 
 const MAX_BYTES = 512 * 1024;
@@ -116,6 +117,11 @@ async function verifiedEmail(request, env) {
 }
 
 async function getViewer(request, env) {
+  if (env.AUTH_MODE === "internal" || request.headers.get("Cookie")?.includes("__Host-drogalink-tarefas=")) {
+    const viewer = await sessionViewer(request, env.DB);
+    if (viewer) return viewer;
+    if (env.AUTH_MODE === "internal") throw new HttpError(401, "Entre com seu e-mail e senha.");
+  }
   const email = await verifiedEmail(request, env);
   const row = await env.DB.prepare(
     "SELECT perfil, unidade FROM tarefas_acessos WHERE email = ? AND ativo = 1"
@@ -124,22 +130,25 @@ async function getViewer(request, env) {
   return { email, role: row.perfil, unitId: row.unidade };
 }
 
+const networkAccess = role => role === "office" || role === "network_manager";
+const accessRoles = ["office", "network_manager", "manager", "employee"];
+
 function canSee(task, data, viewer) {
-  if (viewer.role === "office") return true;
+  if (networkAccess(viewer.role)) return true;
   if (task.unitId !== viewer.unitId) return false;
   if (viewer.role === "manager") return true;
   return data.people.some(person => person.id === task.personId && person.email.trim().toLowerCase() === viewer.email);
 }
 
 function checkUnitAccess(data, viewer) {
-  if (viewer.role !== "office" && !data.units.some(unit => unit.id === viewer.unitId)) {
+  if (!networkAccess(viewer.role) && !data.units.some(unit => unit.id === viewer.unitId)) {
     throw new HttpError(403, "A unidade vinculada à sua conta não está cadastrada.");
   }
 }
 
 function snapshot(data, revision, viewer) {
   if (viewer.role === "office") return { data, revision, viewer };
-  const units = data.units.filter(unit => unit.id === viewer.unitId);
+  const units = networkAccess(viewer.role) ? data.units : data.units.filter(unit => unit.id === viewer.unitId);
   const tasks = data.tasks.filter(task => canSee(task, data, viewer));
   const assignees = new Set(tasks.map(task => task.personId));
   const people = data.people.filter(person => assignees.has(person.id)).map(person => ({ ...person, email: "" }));
@@ -221,10 +230,10 @@ async function manageAccess(request, db, viewer) {
     throw new HttpError(400, "Informe um e-mail válido.");
   }
   if (email === viewer.email) throw new HttpError(403, "Você não pode alterar seu próprio acesso.");
-  if (!["office", "manager", "employee"].includes(perfil) || ![0, 1].includes(ativo)) {
+  if (!accessRoles.includes(perfil) || ![0, 1].includes(ativo)) {
     throw new HttpError(400, "Escolha um perfil e uma situação válidos.");
   }
-  if (perfil === "office" ? unidade !== null : typeof unidade !== "string" || !unidade) {
+  if (networkAccess(perfil) ? unidade !== null : typeof unidade !== "string" || !unidade) {
     throw new HttpError(400, "Escolha uma unidade para gestor ou colaborador.");
   }
   if (unidade !== null) {
@@ -244,13 +253,16 @@ async function manageAccess(request, db, viewer) {
     return json({ user: { email, perfil, unidade, ativo } }, 201);
   }
 
-  if (!anterior || !["office", "manager", "employee"].includes(anterior.perfil) ||
+  if (!anterior || !accessRoles.includes(anterior.perfil) ||
       (anterior.unidade !== null && typeof anterior.unidade !== "string") ||
       ![0, 1].includes(anterior.ativo)) throw new HttpError(400, "Atualize a lista e reabra a edição.");
   const result = await db.prepare(
-    `UPDATE tarefas_acessos SET perfil = ?, unidade = ?, ativo = ?
+    `UPDATE tarefas_acessos SET perfil = ?, unidade = ?, ativo = ?,
+         sessao_versao = sessao_versao + (ativo <> ?),
+         senha_token = CASE WHEN ativo <> ? THEN NULL ELSE senha_token END,
+         senha_token_expira = CASE WHEN ativo <> ? THEN NULL ELSE senha_token_expira END
      WHERE email = ? AND perfil = ? AND unidade IS ? AND ativo = ? AND ${authorized}`
-  ).bind(perfil, unidade, ativo, email, anterior.perfil, anterior.unidade, anterior.ativo, viewer.email).run();
+  ).bind(perfil, unidade, ativo, ativo, ativo, ativo, email, anterior.perfil, anterior.unidade, anterior.ativo, viewer.email).run();
   if (!result.meta.changes) throw new HttpError(409, "O acesso foi alterado em outra sessão ou sua permissão mudou. Atualize a lista.");
   return json({ user: { email, perfil, unidade, ativo } });
 }
@@ -312,6 +324,12 @@ export default {
     const path = new URL(request.url).pathname;
     if (!path.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
+      if (path === "/api/auth/mode" && request.method === "GET") {
+        return json({ internal: env.AUTH_MODE === "internal" });
+      }
+      if (request.method === "POST" && ["/api/auth/login", "/api/auth/logout", "/api/auth/password", "/api/auth/password-link"].includes(path)) {
+        return await handleAuth(request, env.DB, path, { body, json, HttpError, getViewer: () => getViewer(request, env) });
+      }
       const viewer = await getViewer(request, env);
       if (path === "/api/access-users" && ["GET", "POST", "PATCH"].includes(request.method)) {
         return await manageAccess(request, env.DB, viewer);

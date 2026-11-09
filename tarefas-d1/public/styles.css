@@ -31,3 +31,9 @@
 #unitCards code{overflow-wrap:anywhere}
 .install-app:has(button:not([hidden]), small:not([hidden])){margin:0 0 8px}
 .install-app small{display:block;margin-top:6px;color:var(--ink);font-size:12px;line-height:1.4}
+
+.auth-form{margin:18px 0}
+.auth-form label{display:block;margin:12px 0;font-size:13px;font-weight:700}
+.auth-form input{display:block;width:100%;margin-top:5px;padding:10px;border:1px solid #dce3ed;border-radius:8px}
+.auth-form p,#passwordLinkHelp{font-size:13px;color:#475569}
+#passwordLinkDialog{padding:22px}
