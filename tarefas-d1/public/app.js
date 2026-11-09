@@ -193,7 +193,10 @@ function renderTasks() {
     (t.title + " " + personName(t.personId)).toLowerCase().includes(query) &&
     (!status || t.status === status) && (!dept || String(t.departmentId) === dept) &&
     matchesDue(t, due, day)
-  ).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  ).sort((a, b) =>
+    Number(a.status === "Concluída") - Number(b.status === "Concluída") ||
+    (a.due || "9999").localeCompare(b.due || "9999")
+  );
   $("taskList").innerHTML = filtered.length ? filtered.map(taskMarkup).join("") :
     '<div class="empty">Nenhuma tarefa encontrada.</div>';
 }
