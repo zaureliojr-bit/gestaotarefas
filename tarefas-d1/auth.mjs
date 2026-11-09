@@ -93,7 +93,7 @@ export async function handleAuth(request, db, path, { body, json, HttpError, get
   }
 
   if (path === "/api/auth/password") {
-    if (password.length < 15) throw new HttpError(400, "Use pelo menos 15 caracteres.");
+    if (password.length < 10) throw new HttpError(400, "Use pelo menos 10 caracteres.");
     const token = typeof input.token === "string" ? input.token : "";
     if (!tokenFormat.test(token)) throw new HttpError(400, "Link inválido ou expirado.");
     const tokenHash = await digest(token);
