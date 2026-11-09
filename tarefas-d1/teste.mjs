@@ -17,6 +17,7 @@ const insert = sql.prepare("INSERT INTO tarefas_acessos (email, perfil, unidade)
 for (const user of users) insert.run(...user);
 sql.exec("UPDATE tarefas_acessos SET ativo = 0 WHERE email = 'desativado@example.com'");
 sql.exec(readFileSync(new URL("./migrations/0002_unidades_cadastraveis.sql", import.meta.url), "utf8"));
+sql.exec(readFileSync(new URL("./migrations/0003_gestor_de_rede.sql", import.meta.url), "utf8"));
 const DB = {
   prepare(query) {
     const stmt = sql.prepare(query);
@@ -198,6 +199,23 @@ assert.equal((await request(office, "access-users", "PATCH", {
   ...revoked.body.user, ativo: 1, anterior: revoked.body.user
 })).status, 200);
 assert.equal((await request(newEmployee)).status, 200);
+
+const networkAccount = { email: "rede@example.com", perfil: "network_manager", unidade: null, ativo: 1 };
+assert.equal((await request(office, "access-users", "POST", { ...networkAccount, unidade: "vila-sao-pedro" })).status, 400);
+assert.equal((await request(office, "access-users", "POST", networkAccount)).status, 201);
+const networkManager = await token(networkAccount.email);
+const networkView = (await request(networkManager)).body;
+const officeView = (await request(office)).body;
+assert.deepEqual(networkView.data.units, officeView.data.units);
+assert.deepEqual(networkView.data.tasks, officeView.data.tasks);
+assert.ok(networkView.data.people.every(person => person.email === ""));
+assert.equal((await request(networkManager, "access-users")).status, 403);
+assert.equal((await request(networkManager, "access-users", "POST", networkAccount)).status, 403);
+assert.equal((await request(networkManager, "access-users", "PATCH", networkAccount)).status, 403);
+assert.equal((await request(networkManager, "state", "PUT", { data, revision: 1 })).status, 403);
+assert.equal((await request(networkManager, "tasks/5", "PATCH", {
+  revision: networkView.revision, status: "Concluída", checklist: null
+})).status, 200);
 
 assert.match((await request(await token(users[0][0], {}, "ausente"))).body.error, /ACCESS-CHAVE-ID/);
 env.ACCESS_TEAM_URL = "https://outra-equipe.cloudflareaccess.com";

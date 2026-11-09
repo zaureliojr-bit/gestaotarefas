@@ -11,7 +11,7 @@ let revision;
 let saving = false;
 let loading = false;
 const isAdmin = () => viewer?.role === "office";
-const accessRoles = { office: "Escritório", manager: "Gestor de unidade", employee: "Colaborador" };
+const accessRoles = { office: "Escritório", network_manager: "Gestor de rede", manager: "Gestor de unidade", employee: "Colaborador" };
 
 function showMessage(id, message) {
   const el = $(id);
@@ -353,11 +353,15 @@ async function loadAccessUsers() {
   }
 }
 
+function accessNeedsUnit(role) {
+  return role === "manager" || role === "employee";
+}
+
 function updateAccessUnitField() {
-  const office = $("accessRole").value === "office";
-  $("accessUnitLabel").hidden = office;
-  $("accessUnit").disabled = office;
-  $("accessUnit").required = !office;
+  const needsUnit = accessNeedsUnit($("accessRole").value);
+  $("accessUnitLabel").hidden = !needsUnit;
+  $("accessUnit").disabled = !needsUnit;
+  $("accessUnit").required = needsUnit;
 }
 
 function openAccess(user) {
@@ -390,7 +394,7 @@ $("accessForm").addEventListener("submit", async event => {
   const perfil = $("accessRole").value;
   const payload = {
     email: $("accessEmail").value.trim(), perfil,
-    unidade: perfil === "office" ? null : $("accessUnit").value,
+    unidade: accessNeedsUnit(perfil) ? $("accessUnit").value : null,
     ativo: Number($("accessActive").value), anterior: editingAccess
   };
   submit.disabled = true;

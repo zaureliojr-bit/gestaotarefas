@@ -7,6 +7,7 @@ API. A senha compartilhada do painel de pedidos segue no fluxo de pedidos.
 | Perfil | Acesso no módulo |
 |---|---|
 | `office` | Cadastra unidades, funcionários e departamentos, administra tarefas, rotinas e backup da rede |
+| `network_manager` | Acompanha e atualiza o status e os checklists de todas as unidades. A gestão de acessos é reservada ao Escritório. |
 | `manager` | Acompanha e atualiza o status e os checklists da unidade autorizada |
 | `employee` | Atualiza o status e os checklists das tarefas atribuídas a si na unidade autorizada |
 

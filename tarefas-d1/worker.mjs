@@ -124,22 +124,25 @@ async function getViewer(request, env) {
   return { email, role: row.perfil, unitId: row.unidade };
 }
 
+const networkAccess = role => role === "office" || role === "network_manager";
+const accessRoles = ["office", "network_manager", "manager", "employee"];
+
 function canSee(task, data, viewer) {
-  if (viewer.role === "office") return true;
+  if (networkAccess(viewer.role)) return true;
   if (task.unitId !== viewer.unitId) return false;
   if (viewer.role === "manager") return true;
   return data.people.some(person => person.id === task.personId && person.email.trim().toLowerCase() === viewer.email);
 }
 
 function checkUnitAccess(data, viewer) {
-  if (viewer.role !== "office" && !data.units.some(unit => unit.id === viewer.unitId)) {
+  if (!networkAccess(viewer.role) && !data.units.some(unit => unit.id === viewer.unitId)) {
     throw new HttpError(403, "A unidade vinculada à sua conta não está cadastrada.");
   }
 }
 
 function snapshot(data, revision, viewer) {
   if (viewer.role === "office") return { data, revision, viewer };
-  const units = data.units.filter(unit => unit.id === viewer.unitId);
+  const units = networkAccess(viewer.role) ? data.units : data.units.filter(unit => unit.id === viewer.unitId);
   const tasks = data.tasks.filter(task => canSee(task, data, viewer));
   const assignees = new Set(tasks.map(task => task.personId));
   const people = data.people.filter(person => assignees.has(person.id)).map(person => ({ ...person, email: "" }));
@@ -221,10 +224,10 @@ async function manageAccess(request, db, viewer) {
     throw new HttpError(400, "Informe um e-mail válido.");
   }
   if (email === viewer.email) throw new HttpError(403, "Você não pode alterar seu próprio acesso.");
-  if (!["office", "manager", "employee"].includes(perfil) || ![0, 1].includes(ativo)) {
+  if (!accessRoles.includes(perfil) || ![0, 1].includes(ativo)) {
     throw new HttpError(400, "Escolha um perfil e uma situação válidos.");
   }
-  if (perfil === "office" ? unidade !== null : typeof unidade !== "string" || !unidade) {
+  if (networkAccess(perfil) ? unidade !== null : typeof unidade !== "string" || !unidade) {
     throw new HttpError(400, "Escolha uma unidade para gestor ou colaborador.");
   }
   if (unidade !== null) {
@@ -244,7 +247,7 @@ async function manageAccess(request, db, viewer) {
     return json({ user: { email, perfil, unidade, ativo } }, 201);
   }
 
-  if (!anterior || !["office", "manager", "employee"].includes(anterior.perfil) ||
+  if (!anterior || !accessRoles.includes(anterior.perfil) ||
       (anterior.unidade !== null && typeof anterior.unidade !== "string") ||
       ![0, 1].includes(anterior.ativo)) throw new HttpError(400, "Atualize a lista e reabra a edição.");
   const result = await db.prepare(
