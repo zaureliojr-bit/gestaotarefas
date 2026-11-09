@@ -32,7 +32,7 @@ const DB = {
     return { ...bind(), bind };
   }
 };
-const env = { DB, ACCESS_TEAM_URL: "https://teste.cloudflareaccess.com", ACCESS_AUD: "tarefas" };
+const env = { DB, AUTH_PASSWORD_PEPPER: "ab".repeat(32), ACCESS_TEAM_URL: "https://teste.cloudflareaccess.com", ACCESS_AUD: "tarefas" };
 const keys = await crypto.subtle.generateKey({
   name: "RSASSA-PKCS1-v1_5", modulusLength: 2048,
   publicExponent: Uint8Array.of(1, 0, 1), hash: "SHA-256"
@@ -245,7 +245,7 @@ assert.equal((await setPassword(firstLink.body.token, "87654321")).status, 400);
 assert.equal((await setPassword(firstLink.body.token, password)).status, 200);
 assert.equal((await setPassword(firstLink.body.token, password)).status, 400);
 const account = sql.prepare("SELECT senha_hash, senha_token FROM tarefas_acessos WHERE email = ?").get(email);
-assert.notEqual(account.senha_hash, password);
+assert.match(account.senha_hash, /^v2:[a-f0-9]{64}$/);
 assert.equal(account.senha_token, null);
 
 env.AUTH_MODE = "internal";

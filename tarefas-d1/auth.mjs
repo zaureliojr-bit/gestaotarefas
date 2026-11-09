@@ -1,4 +1,4 @@
-import { pbkdf2, timingSafeEqual } from "node:crypto";
+import { createHmac, pbkdf2, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 
 const MINUTE = 60_000;
@@ -13,9 +13,13 @@ async function digest(value) {
   return Buffer.from(await crypto.subtle.digest("SHA-256", Buffer.from(value))).toString("hex");
 }
 
-function hashPassword(password, salt) {
+const HASH_VERSION = 'v2:';
+
+function hashPassword(password, salt, pepper) {
+  const input = pepper ? createHmac('sha256', pepper).update(password).digest() : password;
+  const iterations = pepper ? 100_000 : 600_000;
   return new Promise((resolve, reject) => {
-    pbkdf2(password, Buffer.from(salt, "hex"), 600_000, 32, "sha256", (error, key) => {
+    pbkdf2(input, Buffer.from(salt, "hex"), iterations, 32, "sha256", (error, key) => {
       if (error) reject(error);
       else resolve(key);
     });
@@ -59,7 +63,7 @@ function withCookie(json, token, age) {
   return response;
 }
 
-export async function handleAuth(request, db, path, { body, json, HttpError, getViewer }) {
+export async function handleAuth(request, db, path, { body, json, HttpError, getViewer, pepper }) {
   const input = await body(request);
   if (path === "/api/auth/logout") {
     const token = sessionToken(request);
@@ -82,6 +86,10 @@ export async function handleAuth(request, db, path, { body, json, HttpError, get
     return json({ token });
   }
 
+  if (typeof pepper !== "string" || !/^[a-f0-9]{64}$/i.test(pepper)) {
+    throw new HttpError(503, "Configure o segredo AUTH_PASSWORD_PEPPER no Worker para habilitar o login por senha.");
+  }
+
   const ip = request.headers.get("CF-Connecting-IP") ?? "local";
   if (!await rateLimit(db, `${path}:ip:${ip}`, 30)) {
     throw new HttpError(429, "Muitas tentativas. Aguarde até 15 minutos.");
@@ -102,7 +110,7 @@ export async function handleAuth(request, db, path, { body, json, HttpError, get
     ).bind(tokenHash, Date.now()).first();
     if (!account) throw new HttpError(400, "Link inválido ou expirado.");
     const salt = random(16);
-    const hash = (await hashPassword(password, salt)).toString("hex");
+    const hash = HASH_VERSION + (await hashPassword(password, salt, pepper)).toString("hex");
     const result = await db.prepare(
       `UPDATE tarefas_acessos SET senha_hash = ?, senha_salt = ?, senha_token = NULL, senha_token_expira = NULL,
          sessao_versao = sessao_versao + 1
@@ -119,8 +127,11 @@ export async function handleAuth(request, db, path, { body, json, HttpError, get
   const row = await db.prepare(
     "SELECT senha_hash, senha_salt, sessao_versao FROM tarefas_acessos WHERE email = ? AND ativo = 1"
   ).bind(email).first();
-  const hash = await hashPassword(password, row?.senha_salt ?? "0".repeat(32));
-  const matches = timingSafeEqual(hash, Buffer.from(row?.senha_hash ?? "0".repeat(64), "hex"));
+  const stored = row?.senha_hash;
+  const legacy = /^[a-f0-9]{64}$/.test(stored ?? "");
+  const expected = stored?.startsWith(HASH_VERSION) ? stored.slice(HASH_VERSION.length) : stored;
+  const hash = await hashPassword(password, row?.senha_salt ?? "0".repeat(32), legacy ? null : pepper);
+  const matches = /^[a-f0-9]{64}$/.test(expected ?? "") && timingSafeEqual(hash, Buffer.from(expected, "hex"));
   if (!matches || !row?.senha_hash) throw new HttpError(401, "E-mail ou senha inválidos.");
   const now = Date.now();
   await db.prepare(

@@ -328,7 +328,9 @@ export default {
         return json({ internal: env.AUTH_MODE === "internal" });
       }
       if (request.method === "POST" && ["/api/auth/login", "/api/auth/logout", "/api/auth/password", "/api/auth/password-link"].includes(path)) {
-        return await handleAuth(request, env.DB, path, { body, json, HttpError, getViewer: () => getViewer(request, env) });
+        return await handleAuth(request, env.DB, path, {
+          body, json, HttpError, getViewer: () => getViewer(request, env), pepper: env.AUTH_PASSWORD_PEPPER
+        });
       }
       const viewer = await getViewer(request, env);
       if (path === "/api/access-users" && ["GET", "POST", "PATCH"].includes(request.method)) {
@@ -344,7 +346,7 @@ export default {
       return json({ error: "Rota não encontrada." }, 404);
     } catch (error) {
       if (error instanceof HttpError) return json({ error: error.message }, error.status);
-      console.error("Falha no módulo de tarefas:", error?.name);
+      console.error("Falha no módulo de tarefas:", request.method, path, error?.name);
       return json({ error: "O painel não conseguiu acessar os dados da rede." }, 500);
     }
   }
