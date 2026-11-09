@@ -13,6 +13,7 @@
     ]
   },
   "vars": {
+    "AUTH_MODE": "internal",
     "ACCESS_TEAM_URL": "https://zaureliojr.cloudflareaccess.com",
     "ACCESS_AUD": "b984aaeafd474ef49550c527a14ac79e77e571d4163ec46aa127aeaf28092289"
   },
