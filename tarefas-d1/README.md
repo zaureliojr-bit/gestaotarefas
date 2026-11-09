@@ -106,9 +106,12 @@ essa tela no cache. A API, as tarefas e os dados de login seguem online.
 ## Migrar para login interno
 
 1. Em homologação, use um D1 separado com contas de teste e valide a ativação,
-   o login e a atualização de tarefas. Confirme que a derivação de senha
+   o login e a atualização de tarefas. Configure o segredo do Worker
+   `AUTH_PASSWORD_PEPPER` com 32 bytes aleatórios em hexadecimal (64 caracteres).
+   Guarde o valor com segurança, pois alterá-lo exige redefinir as senhas.
+   Confirme que a derivação de senha
    funciona dentro do limite de CPU do plano do Worker.
-2. Em produção, aplique as migrações pendentes a partir de `tarefas-d1` com
+2. Em produção, configure um segredo `AUTH_PASSWORD_PEPPER` exclusivo e aplique as migrações pendentes a partir de `tarefas-d1` com
    `npx wrangler d1 migrations apply DB --remote` antes do deploy. Publique
    inicialmente com a política do Cloudflare Access ativa e sem `AUTH_MODE`.
 3. Em **Usuários e acessos**, use **Gerar link de senha** para uma conta
