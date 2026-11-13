@@ -43,9 +43,13 @@
         <button class="nav-btn" data-page="people" data-admin><span>♙</span> Funcionários</button>
         <button class="nav-btn" data-page="access" data-admin><span>▣</span> Usuários e acessos</button>
         <button class="nav-btn" data-page="reports"><span>▥</span> Relatórios</button>
+        <button class="nav-btn" data-page="notes"><span aria-hidden="true">▤</span> Bloco de notas</button>
       </nav>
       <div class="sidebar-bottom">
         <div class="profile"><div class="avatar" id="accountAvatar" aria-hidden="true"></div><div><b id="accountName"></b><small id="accountRole"></small></div></div>
+        <label class="theme-control">Tema
+          <select id="accountTheme" disabled><option value="light">Claro</option><option value="dark">Escuro</option></select>
+        </label>
         <span class="demo-label">Dados compartilhados pela rede</span>
         <div class="install-app">
           <button class="btn btn-light" type="button" id="installApp" hidden>Instalar aplicativo</button>
@@ -68,7 +72,7 @@
 
       <div class="content">
         <p id="storageWarning" class="storage-warning" role="alert" hidden></p>
-        <div class="unit-toolbar">
+        <div class="unit-toolbar" id="unitToolbar">
           <label>Unidade <select id="filterUnit"></select></label>
           <button class="btn btn-light" id="cashRoutine" hidden></button>
           <small id="cashRoutineHint" class="task-meta" hidden>O fechamento diário aparece na lista de tarefas da unidade.</small>
@@ -128,6 +132,19 @@
         <section class="page" id="page-reports">
           <div class="page-heading"><div><h1>Relatórios</h1><p>Indicadores das tarefas disponíveis para seu perfil.</p></div></div>
           <div class="report-grid" id="reportSummary"></div>
+        </section>
+
+        <section class="page" id="page-notes">
+          <div class="page-heading"><div><h1>Bloco de notas</h1><p>Ideias e recados visíveis para toda a equipe.</p></div><button class="btn btn-light" type="button" id="refreshNotes">Atualizar notas</button></div>
+          <form id="noteForm" class="card note-form">
+            <label>Título<input name="title" maxlength="120" required></label>
+            <label>Nota<textarea name="content" rows="4" maxlength="4000" required></textarea></label>
+            <button class="btn btn-primary" type="submit">Publicar nota</button>
+            <p id="noteFormError" class="form-error" role="alert" hidden></p>
+          </form>
+          <p id="notesError" class="form-error" role="alert" hidden></p>
+          <div id="notesList"></div>
+          <button class="btn btn-light" id="moreNotes" type="button" hidden>Carregar mais notas</button>
         </section>
       </div>
     </main>

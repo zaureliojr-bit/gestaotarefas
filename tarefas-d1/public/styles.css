@@ -37,3 +37,26 @@
 .auth-form input{display:block;width:100%;margin-top:5px;padding:10px;border:1px solid #dce3ed;border-radius:8px}
 .auth-form p,#passwordLinkHelp{font-size:13px;color:#475569}
 #passwordLinkDialog{padding:22px}
+
+.theme-control{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;font-size:13px}
+.theme-control select,.note-form input,.note-form textarea{border:1px solid var(--line);border-radius:8px;background:var(--surface,#fff);color:var(--ink);padding:8px}
+.note-form label{display:grid;gap:6px;margin-bottom:12px;font-size:13px;font-weight:700}
+.note-form textarea{resize:vertical}
+.team-note{overflow-wrap:anywhere}
+.team-note p{white-space:pre-wrap;margin:12px 0 0}
+
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111827;
+  --surface:#1e293b;
+  --ink:#e5edf8;
+  --muted:#aab9cf;
+  --line:#3b4b61;
+  --blue:#9bc2ff;
+}
+[data-theme="dark"] :is(.sidebar,.topbar,.card,.metric,.profile,.department-card,.report-box,.dialog,.btn-light,.small-btn,.filters input,.filters select,.dialog input,.dialog select,.dialog textarea,.unit-toolbar select){background:var(--surface);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] :is(td,.task-item){border-color:var(--line)}
+[data-theme="dark"] :is(.nav-btn,.department-card .dept-stats,.progress-label span:last-child,.dialog label,.top-user,#passwordLinkHelp){color:var(--muted)}
+[data-theme="dark"] :is(.nav-btn:hover,.nav-btn.active,.avatar,.progress){background:#293d5d;color:var(--blue)}
+[data-theme="dark"] :is(.btn-primary,.brand-mark){background:#245db8;color:white}
+[data-theme="dark"] .mobile-menu{color:var(--ink)}
