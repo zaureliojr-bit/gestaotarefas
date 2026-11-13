@@ -41,7 +41,12 @@ async function api(path, options) {
 function applySnapshot(snapshot) {
   data = snapshot.data;
   revision = snapshot.revision;
+  const accountChanged = viewer?.email !== snapshot.viewer.email;
   viewer = snapshot.viewer;
+  if (accountChanged) {
+    applyTheme("light");
+    loadTheme();
+  }
   $("accountName").textContent = viewer.email;
   $("accountRole").textContent = accessRoles[viewer.role];
   $("greeting").textContent = "Visão geral das tarefas";
@@ -76,6 +81,12 @@ async function sync() {
     if (internalLogin && error.status === 401) {
       $("loginForm").hidden = false;
       data = viewer = revision = undefined;
+      document.documentElement.removeAttribute("data-theme");
+      $("accountTheme").disabled = true;
+      $("notesList").replaceChildren();
+      $("noteForm").reset();
+      $("moreNotes").hidden = true;
+      showPage("overview");
       $("accessTable").replaceChildren();
       accessUsers = [];
     }
@@ -142,16 +153,113 @@ const nextAction = {
 function showPage(name) {
   document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === "page-" + name));
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.toggle("active", button.dataset.page === name));
-  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios" };
+  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios", notes: "Bloco de notas" };
   $("pageTitle").textContent = titles[name];
   $("breadcrumb").textContent = titles[name];
   $("sidebar").classList.remove("open");
+  $("unitToolbar").hidden = name === "notes";
   if (name === "access") loadAccessUsers();
+  if (name === "notes") loadNotes();
 }
 
 document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => showPage(b.dataset.page));
 document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => showPage(b.dataset.go));
 $("mobileMenu").onclick = () => $("sidebar").classList.toggle("open");
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("accountTheme").value = theme;
+}
+
+async function loadTheme() {
+  const email = viewer.email;
+  $("accountTheme").disabled = true;
+  try {
+    const { theme } = await api("preferences");
+    if (viewer?.email !== email) return;
+    applyTheme(theme);
+    $("accountTheme").disabled = false;
+  } catch {
+    if (viewer?.email === email) applyTheme("light");
+  }
+}
+
+$("accountTheme").onchange = async event => {
+  const select = event.currentTarget;
+  const email = viewer.email;
+  const previous = document.documentElement.dataset.theme;
+  select.disabled = true;
+  applyTheme(select.value);
+  try {
+    await api("preferences", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: select.value })
+    });
+  } catch (error) {
+    if (viewer?.email !== email) return;
+    applyTheme(previous);
+    notify(error.message);
+  } finally {
+    if (viewer?.email === email) select.disabled = false;
+  }
+};
+
+let notesRequest = 0;
+let nextNotePage = null;
+const noteDate = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo"
+});
+
+async function loadNotes(before = null) {
+  if (!viewer) return;
+  const requestId = ++notesRequest;
+  const email = viewer.email;
+  const current = () => requestId === notesRequest && viewer?.email === email;
+  $("moreNotes").disabled = true;
+  showMessage("notesError", "");
+  try {
+    const { notes, next } = await api(before === null ? "notes" : "notes?before=" + before);
+    if (!current()) return;
+    const markup = notes.map(note => `<article class="card team-note">
+      <h2>${esc(note.titulo)}</h2>
+      <div class="task-meta">${esc(note.autor)} · ${noteDate.format(note.criada_em)}</div>
+      <p>${esc(note.conteudo)}</p>
+    </article>`).join("");
+    if (before === null) $("notesList").innerHTML = markup || '<p class="empty">Nenhuma nota publicada.</p>';
+    else $("notesList").insertAdjacentHTML("beforeend", markup);
+    nextNotePage = next;
+    $("moreNotes").hidden = next === null;
+  } catch (error) {
+    if (current()) showMessage("notesError", error.message);
+  } finally {
+    if (current()) $("moreNotes").disabled = false;
+  }
+}
+
+$("refreshNotes").onclick = () => loadNotes();
+$("moreNotes").onclick = () => loadNotes(nextNotePage);
+$("noteForm").onsubmit = async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector("button");
+  if (submit.disabled) return;
+  const values = Object.fromEntries(new FormData(form));
+  submit.disabled = true;
+  showMessage("noteFormError", "");
+  try {
+    await api("notes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values)
+    });
+    form.reset();
+    notify("Nota publicada.");
+    await loadNotes();
+  } catch (error) {
+    showMessage("noteFormError", error.message);
+  } finally {
+    submit.disabled = false;
+  }
+};
 
 function tasksByUnit() {
   const unit = $("filterUnit").value;

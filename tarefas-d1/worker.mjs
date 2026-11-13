@@ -319,6 +319,46 @@ async function writeState(request, db, viewer, taskId) {
   return json(snapshot(next, current.revision + 1, viewer));
 }
 
+async function preferences(request, db, viewer) {
+  if (request.method === "GET") {
+    const row = await db.prepare("SELECT tema FROM tarefas_preferencias WHERE email = ?").bind(viewer.email).first();
+    return json({ theme: row?.tema ?? "light" });
+  }
+
+  const { theme } = await body(request);
+  if (!["light", "dark"].includes(theme)) throw new HttpError(400, "Escolha um tema válido.");
+  await db.prepare(
+    "INSERT INTO tarefas_preferencias (email, tema) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET tema = excluded.tema"
+  ).bind(viewer.email, theme).run();
+  return json({ theme });
+}
+
+async function notes(request, db, viewer) {
+  if (request.method === "GET") {
+    const before = new URL(request.url).searchParams.get("before");
+    if (before !== null && (!/^\d+$/.test(before) || !Number.isSafeInteger(Number(before)))) {
+      throw new HttpError(400, "Página de notas inválida.");
+    }
+    const { results } = await db.prepare(
+      `SELECT id, autor, titulo, conteudo, criada_em FROM tarefas_notas
+       WHERE id < ? ORDER BY id DESC LIMIT 21`
+    ).bind(before === null ? Number.MAX_SAFE_INTEGER : Number(before)).all();
+    const entries = results.slice(0, 20);
+    return json({ notes: entries, next: results.length > 20 ? entries.at(-1).id : null });
+  }
+
+  const input = await body(request);
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  const content = typeof input.content === "string" ? input.content.trim() : "";
+  if (!title || title.length > 120 || !content || content.length > 4000) {
+    throw new HttpError(400, "Informe um título de até 120 caracteres e uma nota de até 4.000 caracteres.");
+  }
+  await db.prepare(
+    "INSERT INTO tarefas_notas (autor, titulo, conteudo, criada_em) VALUES (?, ?, ?, ?)"
+  ).bind(viewer.email, title, content, Date.now()).run();
+  return json({ ok: true }, 201);
+}
+
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
@@ -333,6 +373,12 @@ export default {
         });
       }
       const viewer = await getViewer(request, env);
+      if (path === "/api/preferences" && ["GET", "PUT"].includes(request.method)) {
+        return await preferences(request, env.DB, viewer);
+      }
+      if (path === "/api/notes" && ["GET", "POST"].includes(request.method)) {
+        return await notes(request, env.DB, viewer);
+      }
       if (path === "/api/access-users" && ["GET", "POST", "PATCH"].includes(request.method)) {
         return await manageAccess(request, env.DB, viewer);
       }

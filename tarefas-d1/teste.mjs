@@ -66,6 +66,28 @@ async function request(auth, path = "state", method = "GET", payload, origin = d
   return { status: response.status, body: await response.json(), cookie: response.headers.get("set-cookie") };
 }
 
+sql.exec(readFileSync(new URL("./migrations/0005_notas_e_tema.sql", import.meta.url), "utf8"));
+assert.equal((await request(null, "notes")).status, 401);
+assert.equal((await request(disabled, "notes")).status, 403);
+assert.equal((await request(employee, "preferences")).body.theme, "light");
+assert.equal((await request(employee, "preferences", "PUT", { theme: "dark", email: users[0][0] })).status, 200);
+assert.equal((await request(employee, "preferences")).body.theme, "dark");
+assert.equal((await request(office, "preferences")).body.theme, "light");
+assert.equal((await request(employee, "preferences", "PUT", { theme: "invalid" })).status, 400);
+
+assert.equal((await request(employee, "notes", "POST", { title: " ", content: "Uma ideia" })).status, 400);
+assert.equal((await request(employee, "notes", "POST", { title: "Ideia", content: "Uma ideia", author: users[0][0] })).status, 201);
+assert.equal((await request(manager, "notes")).body.notes[0].autor, users[2][0]);
+assert.equal((await request(office, "notes")).body.notes[0].conteudo, "Uma ideia");
+const insertNote = sql.prepare("INSERT INTO tarefas_notas (autor, titulo, conteudo, criada_em) VALUES (?, ?, ?, ?)");
+for (let index = 0; index < 20; index++) insertNote.run(users[0][0], "Nota", "Conteúdo", index);
+const firstPage = (await request(manager, "notes")).body;
+assert.equal(firstPage.notes.length, 20);
+const lastPage = (await request(manager, "notes?before=" + firstPage.next)).body;
+assert.equal(lastPage.notes.length, 1);
+assert.equal(lastPage.notes[0].titulo, "Ideia");
+assert.equal(lastPage.next, null);
+
 assert.equal((await request(null)).status, 401);
 assert.equal((await request(await token(users[0][0], { aud: ["outro"] }))).status, 401);
 assert.equal((await request(await token(users[0][0], { exp: 1 }))).status, 401);
