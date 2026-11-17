@@ -64,8 +64,22 @@
 #chatUnread{margin-left:auto;color:var(--blue);font-weight:700}
 #chatOlder{margin-bottom:10px}
 .chat-messages{max-height:55vh;min-height:120px;overflow:auto}
-.chat-message{padding:10px 0;overflow-wrap:anywhere}
-.chat-message + .chat-message{border-top:1px solid var(--line)}
+.chat-message{
+  width:fit-content;
+  max-width:85%;
+  margin:0 auto 8px 0;
+  padding:8px 12px;
+  overflow-wrap:anywhere;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--bg);
+}
+.chat-message-own{
+  margin-left:auto;
+  margin-right:0;
+  background:#eaf2ff;
+}
+[data-theme="dark"] .chat-message-own{background:#253b5b}
 .chat-message p{margin:4px 0;white-space:pre-wrap}
 .chat-message a{color:var(--blue)}
 #chatForm small{color:var(--muted);font-weight:400}
