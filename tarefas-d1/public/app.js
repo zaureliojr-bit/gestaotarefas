@@ -296,8 +296,9 @@ function messageMarkup(message) {
   const file = message.arquivo_nome
     ? `<a href="./api/chat/${message.id}/attachment" download>${esc(message.arquivo_nome)}</a>` : "";
   const ownMessage = message.autor.toLowerCase() === viewer.email.toLowerCase();
+  const author = [message.autor_nome || message.autor, message.autor_departamento].filter(Boolean).join(" · ");
   return `<article class="chat-message${ownMessage ? " chat-message-own" : ""}">
-    <div class="task-meta">${esc(message.autor)} · ${noteDate.format(message.criada_em)}</div>
+    <div class="task-meta">${esc(author)} · ${noteDate.format(message.criada_em)}</div>
     <p${message.mensagem ? "" : " hidden"}>${esc(message.mensagem)}</p>
     ${file}
   </article>`;
