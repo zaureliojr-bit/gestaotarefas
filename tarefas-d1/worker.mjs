@@ -368,7 +368,10 @@ async function chat(request, db, viewer) {
     const params = new URL(request.url).searchParams;
     if (params.has("summary")) {
       const row = await db.prepare("SELECT MAX(id) AS latest FROM tarefas_chat").first();
-      return json({ latest: row.latest ?? 0 });
+      const incoming = await db.prepare(
+        "SELECT MAX(id) AS latest FROM tarefas_chat WHERE autor <> ? COLLATE NOCASE"
+      ).bind(viewer.email).first();
+      return json({ latest: row.latest ?? 0, latestIncoming: incoming.latest ?? 0 });
     }
 
     const after = params.get("after");
