@@ -46,6 +46,7 @@ function applySnapshot(snapshot) {
   if (accountChanged) {
     applyTheme("light");
     loadTheme();
+    resetChat();
   }
   $("accountName").textContent = viewer.email;
   $("accountRole").textContent = accessRoles[viewer.role];
@@ -74,6 +75,7 @@ async function sync() {
   try {
     applySnapshot(await api("state"));
     showMessage("storageWarning", "");
+    if (!chatOlder.disabled) refreshChat();
   } catch (error) {
     // Oculta os dados em tela caso a sessão ou a concessão tenha expirado.
     $("panel").hidden = true;
@@ -81,6 +83,7 @@ async function sync() {
     if (internalLogin && error.status === 401) {
       $("loginForm").hidden = false;
       data = viewer = revision = undefined;
+      resetChat();
       document.documentElement.removeAttribute("data-theme");
       $("accountTheme").disabled = true;
       $("notesList").replaceChildren();
@@ -153,13 +156,14 @@ const nextAction = {
 function showPage(name) {
   document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === "page-" + name));
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.toggle("active", button.dataset.page === name));
-  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios", notes: "Bloco de notas" };
+  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios", notes: "Bloco de notas", chat: "Chat geral" };
   $("pageTitle").textContent = titles[name];
   $("breadcrumb").textContent = titles[name];
   $("sidebar").classList.remove("open");
-  $("unitToolbar").hidden = name === "notes";
+  $("unitToolbar").hidden = name === "notes" || name === "chat";
   if (name === "access") loadAccessUsers();
   if (name === "notes") loadNotes();
+  if (name === "chat") refreshChat();
 }
 
 document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => showPage(b.dataset.page));
@@ -258,6 +262,131 @@ $("noteForm").onsubmit = async event => {
     showMessage("noteFormError", error.message);
   } finally {
     submit.disabled = false;
+  }
+};
+
+let chatVersion = 0;
+let chatRequest = 0;
+let chatSeen = 0;
+let chatSendId;
+let chatMessages = [];
+const chatPanel = $("chatMessages");
+const chatOlder = $("chatOlder");
+const chatForm = $("chatForm");
+const chatSeenKey = email => "drogalink-chat-seen:" + email;
+
+function resetChat() {
+  chatVersion++;
+  chatRequest++;
+  chatMessages = [];
+  chatSendId = undefined;
+  chatSeen = 0;
+  if (viewer) {
+    try { chatSeen = Number(localStorage.getItem(chatSeenKey(viewer.email))) || 0; } catch {}
+  }
+  chatPanel.replaceChildren();
+  chatForm.reset();
+  chatOlder.hidden = true;
+  $("chatUnread").hidden = true;
+  showMessage("chatReadError", "");
+  showMessage("chatSendError", "");
+}
+
+function messageMarkup(message) {
+  const file = message.arquivo_nome
+    ? `<a href="./api/chat/${message.id}/attachment" download>${esc(message.arquivo_nome)}</a>` : "";
+  return `<article class="chat-message">
+    <div class="task-meta">${esc(message.autor)} · ${noteDate.format(message.criada_em)}</div>
+    <p${message.mensagem ? "" : " hidden"}>${esc(message.mensagem)}</p>
+    ${file}
+  </article>`;
+}
+
+async function refreshChat(before = null) {
+  if (!viewer) return;
+  const requestId = ++chatRequest;
+  const current = () => requestId === chatRequest;
+  const open = $("page-chat").classList.contains("active");
+  chatOlder.disabled = true;
+  try {
+    if (!open) {
+      const { latest } = await api("chat?summary=1");
+      if (current()) $("chatUnread").hidden = latest <= chatSeen;
+      return;
+    }
+
+    const last = chatMessages.at(-1)?.id;
+    const endpoint = before !== null ? "chat?before=" + before : last ? "chat?after=" + last : "chat";
+    const { messages, more } = await api(endpoint);
+    if (!current()) return;
+    const known = new Set(chatMessages.map(message => message.id));
+    const fresh = messages.filter(message => !known.has(message.id));
+    const atBottom = chatPanel.scrollHeight - chatPanel.clientHeight - chatPanel.scrollTop < 32;
+    const oldHeight = chatPanel.scrollHeight;
+    if (!chatMessages.length) {
+      chatPanel.innerHTML = fresh.map(messageMarkup).join("") || '<p class="empty">Nenhuma mensagem ainda.</p>';
+      chatPanel.scrollTop = chatPanel.scrollHeight;
+    } else if (before !== null) {
+      chatPanel.insertAdjacentHTML("afterbegin", fresh.map(messageMarkup).join(""));
+      chatPanel.scrollTop += chatPanel.scrollHeight - oldHeight;
+    } else {
+      chatPanel.insertAdjacentHTML("beforeend", fresh.map(messageMarkup).join(""));
+      if (atBottom) chatPanel.scrollTop = chatPanel.scrollHeight;
+    }
+    if (!chatMessages.length || before !== null) chatOlder.hidden = !more;
+    chatMessages = before === null ? [...chatMessages, ...fresh] : [...fresh, ...chatMessages];
+    chatSeen = Math.max(chatSeen, chatMessages.at(-1)?.id ?? 0);
+    try { localStorage.setItem(chatSeenKey(viewer.email), String(chatSeen)); } catch {}
+    $("chatUnread").hidden = true;
+    showMessage("chatReadError", "");
+  } catch (error) {
+    if (current() && open) showMessage("chatReadError", error.message);
+  } finally {
+    if (current()) chatOlder.disabled = false;
+  }
+}
+
+chatOlder.onclick = () => refreshChat(chatMessages[0].id);
+chatForm.oninput = () => { chatSendId = undefined; };
+chatForm.onsubmit = async event => {
+  event.preventDefault();
+  const submit = chatForm.querySelector("button");
+  if (submit.disabled) return;
+  const text = chatForm.elements.message.value.trim();
+  const file = chatForm.elements.attachment.files[0];
+  showMessage("chatSendError", "");
+  if (!text && !file) return showMessage("chatSendError", "Escreva uma mensagem ou selecione um anexo.");
+  if (file && (file.size === 0 || file.size > 1024 * 1024)) {
+    return showMessage("chatSendError", "Selecione um arquivo de até 1 MB que não esteja vazio.");
+  }
+  const version = chatVersion;
+  const sendId = chatSendId ??= crypto.randomUUID();
+  submit.disabled = true;
+  chatForm.elements.message.readOnly = true;
+  chatForm.elements.attachment.disabled = true;
+  try {
+    const attachment = file ? await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, data: reader.result.split(",")[1] });
+      reader.onerror = () => reject(new Error("Não foi possível ler o anexo."));
+      reader.readAsDataURL(file);
+    }) : null;
+    if (version !== chatVersion) return;
+    await api("chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, attachment, sendId })
+    });
+    if (version !== chatVersion) return;
+    chatForm.reset();
+    chatSendId = undefined;
+    await refreshChat();
+    chatPanel.scrollTop = chatPanel.scrollHeight;
+  } catch (error) {
+    if (version === chatVersion) showMessage("chatSendError", error.message);
+  } finally {
+    submit.disabled = false;
+    chatForm.elements.message.readOnly = false;
+    chatForm.elements.attachment.disabled = false;
   }
 };
 

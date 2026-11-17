@@ -184,7 +184,7 @@ async function readState(db, viewer) {
   throw new HttpError(409, "Houve outra atualização. Sincronize e tente novamente.");
 }
 
-async function body(request) {
+async function body(request, maxBytes = MAX_BYTES + 1024) {
   if (request.headers.get("Origin") !== new URL(request.url).origin) {
     throw new HttpError(403, "Origem da gravação inválida.");
   }
@@ -200,7 +200,7 @@ async function body(request) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.length;
-    if (total > MAX_BYTES + 1024) {
+    if (total > maxBytes) {
       await reader.cancel();
       throw new HttpError(413, "Arquivo muito grande para o piloto.");
     }
@@ -359,6 +359,87 @@ async function notes(request, db, viewer) {
   return json({ ok: true }, 201);
 }
 
+const CHAT_FILE_LIMIT = 1024 * 1024;
+const CHAT_ENCODED_LIMIT = Math.ceil(CHAT_FILE_LIMIT / 3) * 4;
+const CHAT_FILE_NAME = /^[^/\\\p{C}]{1,180}\.(?:pdf|xlsx?|csv|png|jpe?g|webp)$/iu;
+
+async function chat(request, db, viewer) {
+  if (request.method === "GET") {
+    const params = new URL(request.url).searchParams;
+    if (params.has("summary")) {
+      const row = await db.prepare("SELECT MAX(id) AS latest FROM tarefas_chat").first();
+      return json({ latest: row.latest ?? 0 });
+    }
+
+    const after = params.get("after");
+    const cursor = after ?? params.get("before");
+    if (cursor !== null && (!/^\d+$/.test(cursor) || !Number.isSafeInteger(Number(cursor)))) {
+      throw new HttpError(400, "Página do chat inválida.");
+    }
+    const page = after === null ? "id < ? ORDER BY id DESC" : "id > ? ORDER BY id ASC";
+    const { results } = await db.prepare(
+      `SELECT id, autor, mensagem, arquivo_nome, criada_em FROM tarefas_chat
+       WHERE ${page} LIMIT 51`
+    ).bind(cursor === null ? Number.MAX_SAFE_INTEGER : Number(cursor)).all();
+    const messages = results.slice(0, 50);
+    if (after === null) messages.reverse();
+    return json({ messages, more: results.length > 50 });
+  }
+
+  const { text, attachment, sendId } = await body(request, CHAT_ENCODED_LIMIT + 16 * 1024);
+  const message = typeof text === "string" ? text.trim() : "";
+  if (typeof text !== "string" || message.length > 2000 || (!message && !attachment)) {
+    throw new HttpError(400, "Escreva uma mensagem de até 2.000 caracteres ou selecione um anexo.");
+  }
+  if (typeof sendId !== "string" || !/^[a-f0-9-]{36}$/.test(sendId)) {
+    throw new HttpError(400, "Identificador de envio inválido.");
+  }
+
+  let filename = null;
+  let base64 = null;
+  if (attachment) {
+    const { name, data } = attachment;
+    if (typeof name !== "string" || !CHAT_FILE_NAME.test(name)) {
+      throw new HttpError(400, "Anexe uma foto, PDF ou planilha em um formato aceito.");
+    }
+    if (typeof data !== "string" || !data.length || data.length > CHAT_ENCODED_LIMIT || data.length % 4 ||
+        /[^A-Za-z0-9+/=]/.test(data) || data.slice(0, -2).includes("=")) {
+      throw new HttpError(400, "Anexo inválido ou maior que 1 MB.");
+    }
+    let bytes;
+    try {
+      bytes = atob(data);
+    } catch {
+      throw new HttpError(400, "Anexo inválido.");
+    }
+    if (bytes.length > CHAT_FILE_LIMIT) throw new HttpError(413, "Anexe um arquivo de até 1 MB.");
+    filename = name;
+    base64 = data;
+  }
+
+  await db.prepare(
+    `INSERT INTO tarefas_chat (autor, envio, mensagem, arquivo_nome, arquivo_base64, criada_em)
+     VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(autor, envio) DO NOTHING`
+  ).bind(viewer.email, sendId, message, filename, base64, Date.now()).run();
+  return json({ ok: true }, 201);
+}
+
+async function chatAttachment(db, id) {
+  const row = await db.prepare(
+    "SELECT arquivo_nome, arquivo_base64 FROM tarefas_chat WHERE id = ?"
+  ).bind(id).first();
+  if (!row?.arquivo_base64) throw new HttpError(404, "Anexo não encontrado.");
+  const name = encodeURIComponent(row.arquivo_nome).replace(/['()*]/g, char => "%" + char.charCodeAt(0).toString(16));
+  return new Response(Uint8Array.from(atob(row.arquivo_base64), char => char.charCodeAt(0)), {
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename*=UTF-8''${name}`,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff"
+    }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
@@ -373,6 +454,11 @@ export default {
         });
       }
       const viewer = await getViewer(request, env);
+      if (path === "/api/chat" && ["GET", "POST"].includes(request.method)) {
+        return await chat(request, env.DB, viewer);
+      }
+      const attachment = /^\/api\/chat\/(\d+)\/attachment$/.exec(path);
+      if (attachment && request.method === "GET") return await chatAttachment(env.DB, Number(attachment[1]));
       if (path === "/api/preferences" && ["GET", "PUT"].includes(request.method)) {
         return await preferences(request, env.DB, viewer);
       }

@@ -67,6 +67,31 @@ async function request(auth, path = "state", method = "GET", payload, origin = d
 }
 
 sql.exec(readFileSync(new URL("./migrations/0005_notas_e_tema.sql", import.meta.url), "utf8"));
+sql.exec(readFileSync(new URL("./migrations/0006_chat_geral.sql", import.meta.url), "utf8"));
+assert.equal((await request(null, "chat")).status, 401);
+assert.equal((await request(disabled, "chat")).status, 403);
+const chatInput = { text: "Recado para a equipe", attachment: { name: "lista.csv", data: btoa("produto,preco") }, sendId: crypto.randomUUID() };
+assert.equal((await request(employee, "chat", "POST", chatInput)).status, 201);
+assert.equal((await request(employee, "chat", "POST", chatInput)).status, 201);
+const chatRows = (await request(manager, "chat")).body.messages;
+assert.equal(chatRows.length, 1);
+assert.equal(chatRows[0].autor, users[2][0]);
+assert.equal(chatRows[0].arquivo_nome, "lista.csv");
+assert.equal(chatRows[0].arquivo_base64, undefined);
+assert.deepEqual((await request(office, "chat?after=" + chatRows[0].id)).body.messages, []);
+assert.equal((await request(office, "chat?summary=1")).body.latest, chatRows[0].id);
+const filePath = "chat/" + chatRows[0].id + "/attachment";
+assert.equal((await request(null, filePath)).status, 401);
+const fileDownload = await worker.fetch(new Request(domain + "/api/" + filePath, {
+  headers: { "Cf-Access-Jwt-Assertion": manager }
+}), env);
+assert.equal(fileDownload.headers.get("Content-Type"), "application/octet-stream");
+assert.match(fileDownload.headers.get("Content-Disposition"), /^attachment/);
+assert.equal(await fileDownload.text(), "produto,preco");
+assert.equal((await request(employee, "chat", "POST", {
+  ...chatInput, attachment: { ...chatInput.attachment, name: "pagina.html" }
+})).status, 400);
+
 assert.equal((await request(null, "notes")).status, 401);
 assert.equal((await request(disabled, "notes")).status, 403);
 assert.equal((await request(employee, "preferences")).body.theme, "light");
