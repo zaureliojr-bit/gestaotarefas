@@ -60,3 +60,12 @@
 [data-theme="dark"] :is(.nav-btn:hover,.nav-btn.active,.avatar,.progress){background:#293d5d;color:var(--blue)}
 [data-theme="dark"] :is(.btn-primary,.brand-mark){background:#245db8;color:white}
 [data-theme="dark"] .mobile-menu{color:var(--ink)}
+
+#chatUnread{margin-left:auto;color:var(--blue);font-weight:700}
+#chatOlder{margin-bottom:10px}
+.chat-messages{max-height:55vh;min-height:120px;overflow:auto}
+.chat-message{padding:10px 0;overflow-wrap:anywhere}
+.chat-message + .chat-message{border-top:1px solid var(--line)}
+.chat-message p{margin:4px 0;white-space:pre-wrap}
+.chat-message a{color:var(--blue)}
+#chatForm small{color:var(--muted);font-weight:400}

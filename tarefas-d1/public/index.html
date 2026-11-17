@@ -44,6 +44,7 @@
         <button class="nav-btn" data-page="access" data-admin><span>▣</span> Usuários e acessos</button>
         <button class="nav-btn" data-page="reports"><span>▥</span> Relatórios</button>
         <button class="nav-btn" data-page="notes"><span aria-hidden="true">▤</span> Bloco de notas</button>
+        <button class="nav-btn" data-page="chat"><span aria-hidden="true">☏</span> Chat geral <small id="chatUnread" hidden>Novas</small></button>
       </nav>
       <div class="sidebar-bottom">
         <div class="profile"><div class="avatar" id="accountAvatar" aria-hidden="true"></div><div><b id="accountName"></b><small id="accountRole"></small></div></div>
@@ -145,6 +146,21 @@
           <p id="notesError" class="form-error" role="alert" hidden></p>
           <div id="notesList"></div>
           <button class="btn btn-light" id="moreNotes" type="button" hidden>Carregar mais notas</button>
+        </section>
+
+        <section class="page" id="page-chat">
+          <div class="page-heading"><div><h1>Chat geral</h1><p>Mensagens e arquivos visíveis para toda a equipe.</p></div></div>
+          <button class="btn btn-light" id="chatOlder" type="button" hidden>Ver mensagens anteriores</button>
+          <p id="chatReadError" class="form-error" role="alert" hidden></p>
+          <div id="chatMessages" class="card chat-messages" role="log" aria-label="Mensagens"></div>
+          <form id="chatForm" class="card note-form">
+            <label>Mensagem<textarea name="message" rows="3" maxlength="2000"></textarea></label>
+            <label>Anexo <small>PDF, planilha ou foto de até 1 MB</small>
+              <input name="attachment" type="file" accept=".pdf,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp">
+            </label>
+            <button class="btn btn-primary" type="submit">Enviar mensagem</button>
+            <p id="chatSendError" class="form-error" role="alert" hidden></p>
+          </form>
         </section>
       </div>
     </main>
