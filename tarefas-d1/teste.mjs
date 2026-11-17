@@ -76,6 +76,7 @@ assert.equal((await request(employee, "chat", "POST", chatInput)).status, 201);
 const chatRows = (await request(manager, "chat")).body.messages;
 assert.equal(chatRows.length, 1);
 assert.equal(chatRows[0].autor, users[2][0]);
+assert.equal(chatRows[0].autor_nome, null);
 assert.equal(chatRows[0].arquivo_nome, "lista.csv");
 assert.equal(chatRows[0].arquivo_base64, undefined);
 assert.deepEqual((await request(office, "chat?after=" + chatRows[0].id)).body.messages, []);
@@ -161,6 +162,9 @@ const data = {
 assert.equal((await request(office, "state", "PUT", { data, revision: 0 }, "https://fora.example")).status, 403);
 assert.equal((await request(employee, "state", "PUT", { data, revision: 0 })).status, 403);
 assert.equal((await request(office, "state", "PUT", { data, revision: 0, importing: true })).status, 200);
+const namedChatAuthor = (await request(manager, "chat")).body.messages[0];
+assert.equal(namedChatAuthor.autor_nome, "Equipe");
+assert.equal(namedChatAuthor.autor_departamento, data.departments[0].name);
 assert.equal((await request(office, "state", "PUT", { data, revision: 1, importing: true })).status, 409);
 const visibleManager = (await request(manager)).body.data;
 assert.deepEqual(visibleManager.tasks.map(task => task.id), [1, 2]);

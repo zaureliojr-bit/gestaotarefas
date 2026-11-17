@@ -383,7 +383,19 @@ async function chat(request, db, viewer) {
     ).bind(cursor === null ? Number.MAX_SAFE_INTEGER : Number(cursor)).all();
     const messages = results.slice(0, 50);
     if (after === null) messages.reverse();
-    return json({ messages, more: results.length > 50 });
+    if (!messages.length) return json({ messages, more: false });
+    const { data } = await load(db);
+    const people = new Map(data.people.map(person => [person.email?.trim().toLowerCase(), person]));
+    const departments = new Map(data.departments.map(department => [department.id, department.name]));
+    const enriched = messages.map(message => {
+      const person = people.get(message.autor.trim().toLowerCase());
+      return {
+        ...message,
+        autor_nome: person?.name ?? null,
+        autor_departamento: departments.get(person?.departmentId) ?? null
+      };
+    });
+    return json({ messages: enriched, more: results.length > 50 });
   }
 
   const { text, attachment, sendId } = await body(request, CHAT_ENCODED_LIMIT + 16 * 1024);
