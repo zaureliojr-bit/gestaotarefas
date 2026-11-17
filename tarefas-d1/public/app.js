@@ -295,7 +295,8 @@ function resetChat() {
 function messageMarkup(message) {
   const file = message.arquivo_nome
     ? `<a href="./api/chat/${message.id}/attachment" download>${esc(message.arquivo_nome)}</a>` : "";
-  return `<article class="chat-message">
+  const ownMessage = message.autor.toLowerCase() === viewer.email.toLowerCase();
+  return `<article class="chat-message${ownMessage ? " chat-message-own" : ""}">
     <div class="task-meta">${esc(message.autor)} · ${noteDate.format(message.criada_em)}</div>
     <p${message.mensagem ? "" : " hidden"}>${esc(message.mensagem)}</p>
     ${file}
@@ -347,6 +348,12 @@ async function refreshChat(before = null) {
 }
 
 chatOlder.onclick = () => refreshChat(chatMessages[0].id);
+chatForm.elements.message.addEventListener("keydown", event => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  if (!event.repeat) chatForm.requestSubmit();
+});
+
 chatForm.oninput = () => { chatSendId = undefined; };
 chatForm.onsubmit = async event => {
   event.preventDefault();
