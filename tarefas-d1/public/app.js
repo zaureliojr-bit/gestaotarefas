@@ -268,6 +268,7 @@ $("noteForm").onsubmit = async event => {
 let chatVersion = 0;
 let chatRequest = 0;
 let chatSeen = 0;
+let chatNotified = null;
 let chatSendId;
 let chatMessages = [];
 const chatPanel = $("chatMessages");
@@ -281,6 +282,7 @@ function resetChat() {
   chatMessages = [];
   chatSendId = undefined;
   chatSeen = 0;
+  chatNotified = null;
   if (viewer) {
     try { chatSeen = Number(localStorage.getItem(chatSeenKey(viewer.email))) || 0; } catch {}
   }
@@ -312,8 +314,13 @@ async function refreshChat(before = null) {
   chatOlder.disabled = true;
   try {
     if (!open) {
-      const { latest } = await api("chat?summary=1");
-      if (current()) $("chatUnread").hidden = latest <= chatSeen;
+      const { latest, latestIncoming } = await api("chat?summary=1");
+      if (!current() || $("page-chat").classList.contains("active")) return;
+      $("chatUnread").hidden = latest <= chatSeen;
+      if (chatNotified !== null && latestIncoming > Math.max(chatNotified, chatSeen)) {
+        notify("Nova mensagem no Chat geral");
+      }
+      chatNotified = Math.max(chatNotified ?? 0, latestIncoming ?? 0);
       return;
     }
 
@@ -338,6 +345,7 @@ async function refreshChat(before = null) {
     if (!chatMessages.length || before !== null) chatOlder.hidden = !more;
     chatMessages = before === null ? [...chatMessages, ...fresh] : [...fresh, ...chatMessages];
     chatSeen = Math.max(chatSeen, chatMessages.at(-1)?.id ?? 0);
+    chatNotified = Math.max(chatNotified ?? 0, chatSeen);
     try { localStorage.setItem(chatSeenKey(viewer.email), String(chatSeen)); } catch {}
     $("chatUnread").hidden = true;
     showMessage("chatReadError", "");
