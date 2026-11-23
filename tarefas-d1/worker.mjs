@@ -439,16 +439,23 @@ async function chat(request, db, viewer) {
   return json({ ok: true }, 201);
 }
 
-async function chatAttachment(db, id) {
+async function chatAttachment(db, id, preview = false) {
   const row = await db.prepare(
     "SELECT arquivo_nome, arquivo_base64 FROM tarefas_chat WHERE id = ?"
   ).bind(id).first();
   if (!row?.arquivo_base64) throw new HttpError(404, "Anexo não encontrado.");
   const name = encodeURIComponent(row.arquivo_nome).replace(/['()*]/g, char => "%" + char.charCodeAt(0).toString(16));
-  return new Response(Uint8Array.from(atob(row.arquivo_base64), char => char.charCodeAt(0)), {
+  const bytes = Uint8Array.from(atob(row.arquivo_base64), char => char.charCodeAt(0));
+  let imageType = null;
+  if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => bytes[index] === byte)) imageType = "image/png";
+  else if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) imageType = "image/jpeg";
+  else if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+           String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") imageType = "image/webp";
+  if (preview && !imageType) throw new HttpError(415, "Este anexo não tem uma prévia de imagem válida.");
+  return new Response(bytes, {
     headers: {
-      "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename*=UTF-8''${name}`,
+      "Content-Type": preview ? imageType : "application/octet-stream",
+      "Content-Disposition": `${preview ? "inline" : "attachment"}; filename*=UTF-8''${name}`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff"
     }
@@ -473,7 +480,7 @@ export default {
         return await chat(request, env.DB, viewer);
       }
       const attachment = /^\/api\/chat\/(\d+)\/attachment$/.exec(path);
-      if (attachment && request.method === "GET") return await chatAttachment(env.DB, Number(attachment[1]));
+      if (attachment && request.method === "GET") return await chatAttachment(env.DB, Number(attachment[1]), new URL(request.url).searchParams.get("preview") === "1");
       if (path === "/api/preferences" && ["GET", "PUT"].includes(request.method)) {
         return await preferences(request, env.DB, viewer);
       }

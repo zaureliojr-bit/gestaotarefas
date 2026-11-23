@@ -294,14 +294,39 @@ function resetChat() {
   showMessage("chatSendError", "");
 }
 
+function chatTextMarkup(text) {
+  const pattern = /(?:https?:\/\/|www\.)[^\s<>"\']+/gi;
+  let result = "";
+  let position = 0;
+  for (const match of text.matchAll(pattern)) {
+    let link = match[0].replace(/[.,!?;:]+$/, "");
+    while (link.endsWith(")") && (link.match(/\)/g) || []).length > (link.match(/\(/g) || []).length) link = link.slice(0, -1);
+    result += esc(text.slice(position, match.index));
+    try {
+      const url = new URL(/^www\./i.test(link) ? "https://" + link : link);
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+      result += `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${esc(link)}</a>`;
+    } catch {
+      result += esc(link);
+    }
+    position = match.index + link.length;
+  }
+  return result + esc(text.slice(position));
+}
+
 function messageMarkup(message) {
   const file = message.arquivo_nome
     ? `<a href="./api/chat/${message.id}/attachment" download>${esc(message.arquivo_nome)}</a>` : "";
+  const preview = /\.(?:png|jpe?g|webp)$/i.test(message.arquivo_nome || "")
+    ? `<a class="chat-image-link" href="./api/chat/${message.id}/attachment?preview=1" target="_blank" rel="noopener noreferrer">
+        <img class="chat-image" src="./api/chat/${message.id}/attachment?preview=1" alt="${esc(message.arquivo_nome)}" loading="lazy">
+      </a>` : "";
   const ownMessage = message.autor.toLowerCase() === viewer.email.toLowerCase();
   const author = [message.autor_nome || message.autor, message.autor_departamento].filter(Boolean).join(" · ");
   return `<article class="chat-message${ownMessage ? " chat-message-own" : ""}">
     <div class="task-meta">${esc(author)} · ${noteDate.format(message.criada_em)}</div>
-    <p${message.mensagem ? "" : " hidden"}>${esc(message.mensagem)}</p>
+    <p${message.mensagem ? "" : " hidden"}>${chatTextMarkup(message.mensagem)}</p>
+    ${preview}
     ${file}
   </article>`;
 }

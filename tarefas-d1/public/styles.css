@@ -83,3 +83,6 @@
 .chat-message p{margin:4px 0;white-space:pre-wrap}
 .chat-message a{color:var(--blue)}
 #chatForm small{color:var(--muted);font-weight:400}
+
+.chat-image-link{display:block;margin:8px 0}
+.chat-image{display:block;max-width:100%;width:auto;max-height:260px;object-fit:contain;border-radius:8px}
