@@ -135,6 +135,7 @@
               <article class="card"><div class="card-heading"><h2>Cobertura por cargo</h2></div><div id="scheduleCoverageRules"></div></article>
             </div>
             <article class="card"><div class="card-heading"><h2 id="scheduleHeading">Funcionários e dias de trabalho</h2><div class="person-actions"><button class="btn btn-light" id="scheduleRoster" type="button">Atualizar equipe</button><button class="btn btn-primary" id="scheduleGenerate" type="button">Gerar escala 5×2</button></div></div>
+              <div class="filters schedule-rest-filter"><label>Distribuição das folgas<select id="scheduleRestPattern"><option value="separate">Folgas separadas</option><option value="together">Preferir folgas consecutivas</option><option value="free">Livre (máximo 2 seguidas)</option></select></label></div>
               <p id="scheduleHours" class="task-meta"></p><p id="scheduleShiftSummary" class="task-meta"></p><p class="task-meta">T = trabalho · F = folga · V = férias · A = afastamento. Ajuste cada dia ou turno na tabela.</p>
               <div class="schedule-holidays"><label>Feriado adicional <input id="scheduleHoliday" type="date"></label><button class="btn btn-light" id="scheduleAddHoliday" type="button">Adicionar</button><span id="scheduleHolidays"></span></div>
               <div class="schedule-table-wrap" id="scheduleTable"></div>

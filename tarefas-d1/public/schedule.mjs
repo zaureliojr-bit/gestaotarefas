@@ -35,6 +35,7 @@ const states = ["T", "F", "V", "A"];
 const text = (value, max) => typeof value === "string" && value.trim() && value.length <= max;
 export function validatePlan(plan) {
   if (!plan || !validMonth(plan.month) || !text(plan.unitId, 64) || !["draft", "published"].includes(plan.status)) throw new Error("Escala inválida.");
+  if (plan.restPattern !== undefined && !["separate", "together", "free"].includes(plan.restPattern)) throw new Error("Distribuição de folgas inválida.");
   const days = monthDays(plan.month);
   if (!Array.isArray(plan.shifts) || !plan.shifts.length || plan.shifts.length > 12 || plan.shifts.some(s => !s ||
     !Number.isSafeInteger(s.id) || s.id <= 0 || !text(s.name, 60) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.start) ||
@@ -79,10 +80,14 @@ export function analyzePlan(plan, neighbors = []) {
   for (const row of plan.rows) {
     let incomplete = false;
     let streak = 0;
+    let restStreak = 0;
+    const restLimit = plan.restPattern === "separate" ? 1 : 2;
     let sundayStreak = 0;
     for (let day = offsetDay(days[0], -21); day <= offsetDay(days.at(-1), 7); day = offsetDay(day, 1)) {
       const state = dayState(plan, row.personId, day, neighbors);
       streak = state === "T" ? streak + 1 : 0;
+      restStreak = state === "F" ? restStreak + 1 : 0;
+      if (day >= days[0] && offsetDay(day, -restLimit) <= days.at(-1) && restStreak === restLimit + 1) issues.push(`${row.name}: ${restStreak} folgas seguidas (${day}).`);
       if (day >= days[0] && offsetDay(day, -6) <= days.at(-1) && streak === 7) issues.push(`${row.name}: mais de seis dias seguidos de trabalho (${day}).`);
       if (weekday(day) === 6) {
         sundayStreak = state === "T" ? sundayStreak + 1 : 0;
@@ -96,6 +101,7 @@ export function analyzePlan(plan, neighbors = []) {
       if (states.some(s => s === "V" || s === "A")) continue;
       const total = states.filter(s => s === "T").length;
       if (total !== 5) issues.push(`${row.name}: ${week} — ${total} dias de trabalho na semana (esperado 5).`);
+      if (plan.restPattern === "together" && total === 5 && !states.some((s, i) => s === "F" && states[i + 1] === "F")) warnings.push(`${row.name}: ${week} — folgas separadas devido à distribuição da escala.`);
     }
     if (incomplete) incompleteCount++;
   }
@@ -121,6 +127,11 @@ export function generatePlan(plan, neighbors = []) {
       for (const pair of candidates) {
         const pattern = weekDays.map((_, i) => fixed[i] ?? (pair.includes(i) ? "F" : "T"));
         let score = Math.abs(pattern.filter(s => s === "F").length - 2) * 10000;
+        const restLimit = plan.restPattern === "separate" ? 1 : 2;
+        let restStreak = 0;
+        for (let prior = offsetDay(week, -1); restStreak <= restLimit && dayState(history, row.personId, prior, neighbors) === "F"; prior = offsetDay(prior, -1)) restStreak++;
+        for (const state of pattern) { restStreak = state === "F" ? restStreak + 1 : 0; if (restStreak > restLimit) score += 100000; }
+        if (plan.restPattern === "together" && !pattern.some((s, i) => s === "F" && pattern[i + 1] === "F")) score += 100;
         let streak = 0;
         for (let prior = offsetDay(week, -1); streak < 7 && dayState(history, row.personId, prior, neighbors) === "T"; prior = offsetDay(prior, -1)) streak++;
         for (const state of pattern) { streak = state === "T" ? streak + 1 : 0; if (streak > 6) score += 10000; }
