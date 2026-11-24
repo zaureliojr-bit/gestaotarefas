@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import worker from "./worker.mjs";
-import { analyzePlan, generatePlan, monthDays, defaultShift, dailyMinutes, shiftEnd, normalizeShiftTime } from "./public/schedule.mjs";
+import { analyzePlan, generatePlan, monthDays, defaultShift, dailyMinutes, shiftEnd, normalizeShiftTime, weekday } from "./public/schedule.mjs";
 
 const sql = new DatabaseSync(":memory:");
 const migration = readFileSync(new URL("./migrations/0001_tarefas.sql", import.meta.url), "utf8");
@@ -391,4 +391,13 @@ assert.ok(monthly.rows.every(row => row.days.filter(state => state === "F").leng
 const followingMonth = generatePlan({ ...monthly, month: "2027-01", holidays: [], rows: monthly.rows.map(row => ({ ...row, days: monthDays("2027-01").map(() => "T") })) }, [monthly]);
 assert.equal(analyzePlan(monthly, [followingMonth]).issues.length, 0);
 assert.equal(analyzePlan(followingMonth, [monthly]).issues.length, 0);
+const pharmacyPlan = generatePlan({ ...plan, restPattern: "separate", rows: [{ ...plan.rows[0], jobTitle: "FARMACEUTICO", fixedRestDay: 2 }], coverage: [{ shiftId: 1, jobTitle: "FARMACEUTICO", minimum: 1, flexibleDays: [2, 6] }] });
+assert.ok(pharmacyPlan.rows[0].days.every((state, i) => state === ([2, 6].includes(weekday(monthDays(pharmacyPlan.month)[i])) ? "F" : "T")));
+const flexibleReport = analyzePlan(pharmacyPlan);
+assert.equal(flexibleReport.issues.length, 0);
+assert.equal(flexibleReport.warnings.filter(w => w.includes("cobertura flexível")).length, 1);
+assert.equal(flexibleReport.diagnosis[0].missing, 0);
+const requiredReport = analyzePlan({ ...pharmacyPlan, coverage: [{ ...pharmacyPlan.coverage[0], flexibleDays: [] }] });
+assert.equal(requiredReport.issues.length, 1);
+assert.equal(requiredReport.diagnosis[0].missing, 2);
 console.log("OK: geração 5×2, continuidade entre meses, cobertura, publicação, controle de revisão e permissões de escala.");

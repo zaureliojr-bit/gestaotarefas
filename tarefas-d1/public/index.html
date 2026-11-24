@@ -132,15 +132,17 @@
           <div id="scheduleEditor" hidden>
             <div class="schedule-config">
               <article class="card"><div class="card-heading"><h2>Turnos e cobertura mínima</h2><button class="btn btn-light" id="scheduleAddShift" type="button">＋ Turno</button></div><div id="scheduleShifts"></div></article>
-              <article class="card"><div class="card-heading"><h2>Cobertura por cargo</h2></div><div id="scheduleCoverageRules"></div></article>
+              <article class="card"><div class="card-heading"><h2>Cobertura por cargo</h2></div><p class="task-meta">Dias flexíveis geram avisos. Preserve a assistência farmacêutica durante todo o funcionamento da loja.</p><div id="scheduleCoverageRules"></div></article>
             </div>
             <article class="card"><div class="card-heading"><h2 id="scheduleHeading">Funcionários e dias de trabalho</h2><div class="person-actions"><button class="btn btn-light" id="scheduleRoster" type="button">Atualizar equipe</button><button class="btn btn-primary" id="scheduleGenerate" type="button">Gerar escala 5×2</button></div></div>
               <div class="filters schedule-rest-filter"><label>Distribuição das folgas<select id="scheduleRestPattern"><option value="separate">Folgas separadas</option><option value="together">Preferir folgas consecutivas</option><option value="free">Livre (máximo 2 seguidas)</option></select></label><small class="task-meta">A geração prioriza 8 folgas no mês, respeitando as duas folgas semanais, a cobertura e os meses vizinhos.</small></div>
+              <div id="scheduleFixedRest" class="schedule-fixed-rest"></div>
               <p id="scheduleHours" class="task-meta"></p><p id="scheduleShiftSummary" class="task-meta"></p><p class="task-meta">T = trabalho · F = folga · V = férias · A = afastamento. Ajuste cada dia ou turno na tabela.</p>
               <div class="schedule-holidays"><label>Feriado adicional <input id="scheduleHoliday" type="date"></label><button class="btn btn-light" id="scheduleAddHoliday" type="button">Adicionar</button><span id="scheduleHolidays"></span></div>
               <div class="schedule-table-wrap" id="scheduleTable"></div>
               <div class="schedule-actions"><button class="btn btn-light" id="scheduleSave" type="button">Salvar rascunho</button><button class="btn btn-primary" id="schedulePublish" type="button">Publicar escala</button><button class="btn btn-light" id="scheduleExport" type="button">Exportar CSV</button><button class="btn btn-light" id="schedulePrint" type="button">Imprimir / PDF</button></div>
             </article>
+            <article class="card"><div class="card-heading"><h2>Diagnóstico de equipe</h2></div><p class="task-meta">Estimativa mínima de pessoas para os dias de cobertura obrigatória, considerando a escala 5×2 e o revezamento de domingos.</p><div class="table-wrap" id="scheduleDiagnosis"></div></article>
             <article class="card"><div class="card-heading"><h2>Validação da escala</h2><span id="scheduleValidationCount" class="tag"></span></div><div id="scheduleValidation"></div></article>
           </div>
         </section>

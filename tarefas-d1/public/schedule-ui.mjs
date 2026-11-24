@@ -1,4 +1,4 @@
-import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth, normalizeShiftTime } from "./schedule.mjs";
+import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth, normalizeShiftTime, isPharmacist } from "./schedule.mjs";
 import { localDay } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
@@ -51,7 +51,10 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const template = context.plans.filter(p => p.month < month).sort((a, b) => b.month.localeCompare(a.month))[0];
     const shifts = structuredClone(template?.shifts ?? [defaultShift()]);
     const days = monthDays(month);
-    const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => ({ personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, template?.rows.find(r => r.personId === p.id)?.shiftId), days: days.map(() => "T") }));
+    const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
+      const previous = template?.rows.find(r => r.personId === p.id);
+      return { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, previous?.shiftId), fixedRestDay: isPharmacist(p.jobTitle) ? previous?.fixedRestDay ?? null : null, days: days.map(() => "T") };
+    });
     return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), restPattern: template?.restPattern ?? "separate", status: "draft" };
   }
   function preferredShift(person, shifts, fallback) {
@@ -87,6 +90,8 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   function render() {
     if (!plan) return;
     $("scheduleRestPattern").value = plan.restPattern ?? "free";
+    const pharmacists = plan.rows.filter(r => isPharmacist(r.jobTitle));
+    $("scheduleFixedRest").innerHTML = pharmacists.length ? `<h3>Folgas fixas dos farmacêuticos</h3><p class="task-meta">Escolha domingo fixo e mais um dia da semana. A cobertura obrigatória continua sendo verificada.</p>${pharmacists.map(r => `<label>${esc(r.name)}<select data-fixed-rest="${r.personId}">${option("", "Revezamento normal", r.fixedRestDay == null)}${weekNames.slice(0, 6).map((name, day) => option(day, `Domingo + ${name}`, r.fixedRestDay === day)).join("")}</select></label>`).join("")}` : "";
     const days = monthDays(plan.month);
     $("scheduleHeading").textContent = `${getData().units.find(u => u.id === plan.unitId)?.name ?? plan.unitId} · ${plan.month.slice(5)}/${plan.month.slice(0, 4)}`;
     $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s)} · intervalo ${s.breakMinutes} min`).join(" | ");
@@ -96,11 +101,12 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
       const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
       const count = plan.rows.filter(r => r.shiftId === shift.id).length;
       const expanded = expandedCoverageShift === shift.id;
-      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><button class="schedule-coverage-toggle" type="button" data-toggle-coverage="${shift.id}" aria-expanded="${expanded}" aria-controls="coverage-shift-${shift.id}"><span aria-hidden="true">${expanded ? "▾" : "▸"}</span><div><strong>${esc(shift.name)}</strong><small>${esc(shift.start)}–${esc(shiftEnd(shift))} · ${count} funcionário(s) · ${rules.length} cargo(s)</small></div></button><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div><div id="coverage-shift-${shift.id}"${expanded ? "" : " hidden"}>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button>${renderRulePeople(shift, c)}</div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</div></section>`;
+      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><button class="schedule-coverage-toggle" type="button" data-toggle-coverage="${shift.id}" aria-expanded="${expanded}" aria-controls="coverage-shift-${shift.id}"><span aria-hidden="true">${expanded ? "▾" : "▸"}</span><div><strong>${esc(shift.name)}</strong><small>${esc(shift.start)}–${esc(shiftEnd(shift))} · ${count} funcionário(s) · ${rules.length} cargo(s)</small></div></button><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div><div id="coverage-shift-${shift.id}"${expanded ? "" : " hidden"}>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button><div class="schedule-flex-days"><strong>Permitir falta de cobertura nestes dias</strong><div>${weekNames.map((name, day) => `<label><input type="checkbox" data-flex-day="${day}"${c.flexibleDays?.includes(day) ? " checked" : ""}>${name}</label>`).join("")}</div></div>${renderRulePeople(shift, c)}</div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</div></section>`;
     }).join("");
     $("scheduleHoliday").min = days[0]; $("scheduleHoliday").max = days.at(-1);
     $("scheduleHolidays").innerHTML = plan.holidays.map(d => `<button type="button" class="small-btn" data-remove-holiday="${d}">${d.slice(-2)} ×</button>`).join(" ");
     const report = analyzePlan(plan, context.plans);
+    $("scheduleDiagnosis").innerHTML = report.diagnosis.length ? `<table><thead><tr><th>Turno</th><th>Cargo</th><th>Equipe atual</th><th>Mínimo estimado</th><th>Faltam</th></tr></thead><tbody>${report.diagnosis.map(r => `<tr><td>${esc(r.shift)}</td><td>${esc(r.job)}</td><td>${r.assigned}</td><td>${r.required}</td><td class="${r.missing ? "schedule-issue" : ""}">${r.missing}</td></tr>`).join("")}</tbody></table>` : '<p class="task-meta">Configure a cobertura mínima para obter o diagnóstico.</p>';
     const head = days.map(d => `<th class="${weekday(d) === 6 || plan.holidays.includes(d) ? "schedule-holiday" : ""}" title="${d}${plan.holidays.includes(d) ? ' — Feriado' : ''}">${d.slice(-2)}<small>${weekNames[weekday(d)]}</small></th>`).join("");
     const rows = plan.rows.map(row => `<tr><th scope="row"><strong>${esc(row.name)}</strong><small>${esc(row.jobTitle || "Sem cargo")}</small><select aria-label="Turno de ${esc(row.name)}" data-person-shift="${row.personId}">${shiftOptions(row.shiftId)}</select></th>${row.days.map((s, index) => `<td><select class="schedule-day state-${s}" aria-label="${esc(row.name)} ${days[index]}" data-person="${row.personId}" data-day="${index}">${Object.entries(stateNames).map(([v, label]) => option(v, v, s === v)).join("")}</select></td>`).join("")}<td>${row.days.filter(s => s === "T").length}</td><td>${row.days.filter(s => s === "F").length}</td></tr>`).join("");
     const totals = plan.shifts.map((shift, i) => `<tr class="schedule-total"><th>${esc(shift.name)} · cobertura</th>${days.map((_, j) => `<td class="${report.coverage[j][i] < shift.minimum ? 'schedule-short' : ''}">${report.coverage[j][i]}</td>`).join("")}<td colspan="2"></td></tr>`).join("");
@@ -138,7 +144,13 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleShifts").onclick = e => { const id = Number(e.target.dataset.deleteShift); if (!id || plan.rows.some(r => r.shiftId === id) || plan.shifts.length === 1) return; plan.shifts = plan.shifts.filter(s => s.id !== id); plan.coverage = plan.coverage.filter(c => c.shiftId !== id); markDirty(); render(); };
   $("scheduleCoverageRules").onchange = e => {
     const input = e.target;
-    if (input.dataset.assignPerson) {
+    if (input.dataset.flexDay !== undefined) {
+      const rule = plan.coverage[Number(input.closest("[data-rule]").dataset.rule)];
+      const day = Number(input.dataset.flexDay);
+      const days = new Set(rule.flexibleDays ?? []);
+      if (input.checked) days.add(day); else days.delete(day);
+      rule.flexibleDays = [...days].sort((a, b) => a - b);
+    } else if (input.dataset.assignPerson) {
       const shiftId = Number(input.dataset.assignPerson);
       const rule = plan.coverage[Number(input.dataset.assignmentRule)];
       const person = plan.rows.find(r => r.personId === Number(input.value));
@@ -173,6 +185,12 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleAddHoliday").onclick = () => { const day = $("scheduleHoliday").value; if (!monthDays(plan.month).includes(day) || plan.holidays.includes(day)) return; plan.holidays.push(day); plan.holidays.sort(); markDirty(); render(); };
   $("scheduleHolidays").onclick = e => { const day = e.target.dataset.removeHoliday; if (!day) return; plan.holidays = plan.holidays.filter(d => d !== day); markDirty(); render(); };
   $("scheduleGenerate").onclick = () => { plan = generatePlan(plan, context.plans); markDirty(); render(); };
+  $("scheduleFixedRest").onchange = e => {
+    const row = plan.rows.find(r => r.personId === Number(e.target.dataset.fixedRest));
+    if (!row || !isPharmacist(row.jobTitle)) return;
+    row.fixedRestDay = e.target.value === "" ? null : Number(e.target.value);
+    markDirty(); render();
+  };
   $("scheduleRestPattern").onchange = () => { plan.restPattern = $("scheduleRestPattern").value; markDirty(); render(); };
   $("scheduleRoster").onclick = async () => {
     if (!window.confirm("Atualizar funcionários ativos e aplicar os turnos padrão do cadastro? Os dias dos funcionários mantidos serão preservados.")) return;
@@ -187,7 +205,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     plan.rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
       const row = existing.get(p.id);
       const shiftId = preferredShift(p, plan.shifts, row?.shiftId);
-      return row ? { ...row, name: p.name, jobTitle: p.jobTitle, shiftId } : { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId, days: monthDays(plan.month).map(() => "F") };
+      return row ? { ...row, name: p.name, jobTitle: p.jobTitle, shiftId, fixedRestDay: isPharmacist(p.jobTitle) ? row.fixedRestDay ?? null : null } : { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId, days: monthDays(plan.month).map(() => "F") };
     });
     markDirty(); render();
   };
