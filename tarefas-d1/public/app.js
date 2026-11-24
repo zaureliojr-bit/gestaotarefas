@@ -617,9 +617,11 @@ $("departmentCards").onclick = event => {
 function renderPeople() {
   const unit = $("filterUnit").value;
   const status = $("filterPeopleStatus").value;
+  const job = $("filterPeopleJob").value;
   const query = $("searchPeople").value.trim().toLocaleLowerCase("pt-BR");
   const people = data.people.filter(p => (!unit || (unit === "none" ? !p.unitId : p.unitId === unit)) &&
-    (!status || (p.employmentStatus ?? "Ativo") === status) && `${p.name} ${p.jobTitle ?? ""}`.toLocaleLowerCase("pt-BR").includes(query));
+    (!status || (p.employmentStatus ?? "Ativo") === status) &&
+    (!job || unitNameKey(p.jobTitle ?? "") === job) && `${p.name} ${p.jobTitle ?? ""}`.toLocaleLowerCase("pt-BR").includes(query));
   $("peopleTable").innerHTML = people.map(p =>
     `<tr><td><b>${esc(p.name)}</b></td><td>${esc(unitName(p.unitId))}</td><td>${esc(p.jobTitle || "–")}</td><td>${esc(p.employmentStatus ?? "Ativo")}</td><td>${esc(p.email || "–")}</td><td>${esc(deptName(p.departmentId))}</td>
       <td>${esc(p.role)}</td><td><div class="person-actions">
@@ -630,6 +632,7 @@ function renderPeople() {
 }
 $("searchPeople").oninput = renderPeople;
 $("filterPeopleStatus").onchange = renderPeople;
+$("filterPeopleJob").onchange = renderPeople;
 
 let accessUsers = [];
 let editingAccess;
@@ -790,6 +793,8 @@ function populateSelects() {
   const departments = data.departments.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
   options("taskDepartment", departments);
   options("personDepartment", '<option value="">Sem departamento</option>' + departments);
+  const jobs = new Map(data.people.filter(p => p.jobTitle?.trim()).map(p => [unitNameKey(p.jobTitle), p.jobTitle.trim()]));
+  options("filterPeopleJob", '<option value="">Todos os cargos</option>' + [...jobs].sort((a, b) => a[1].localeCompare(b[1], "pt-BR")).map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join(""));
   options("filterDepartment", '<option value="">Todos os departamentos</option>' + departments);
   options("taskPerson", '<option value="">Não atribuído</option>' + data.people.map(p =>
     `<option value="${p.id}">${esc(p.name)} · ${esc(deptName(p.departmentId))}</option>`
