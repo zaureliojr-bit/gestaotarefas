@@ -91,7 +91,10 @@
 .schedule-controls{align-items:end;grid-template-columns:2fr 1fr auto}
 .schedule-config{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
 .schedule-shift,.schedule-rule{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;align-items:end;padding:12px 0;border-top:1px solid var(--line)}
-.schedule-rule{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 70px auto}
+.schedule-rule{grid-template-columns:minmax(0,1fr) 70px auto}
+.schedule-coverage-group{padding:12px 0;border-top:1px solid var(--line)}
+.schedule-coverage-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
+.schedule-coverage-heading small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
 .schedule-shift small{grid-column:1/-1;color:var(--muted);font-size:11px}
 .schedule-shift input,.schedule-rule input,.schedule-rule select,.schedule-holidays input,.schedule-grid select{min-width:0;width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:transparent;font-size:11px}
 .schedule-holidays,.schedule-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0}
