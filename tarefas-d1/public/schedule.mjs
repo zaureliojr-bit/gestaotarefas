@@ -31,6 +31,25 @@ export const shiftEnd = shift => {
   return `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
 };
 export const defaultShift = () => ({ id: 1, name: "Turno 1", start: "08:00", breakMinutes: 60, minimum: 1 });
+export function reconcileRoster(plan, people, forcePreferred = false) {
+  const shifts = structuredClone(plan.shifts);
+  const existing = new Map(plan.rows.map(row => [row.personId, row]));
+  const rows = people.filter(p => p.employmentStatus === "Ativo").map(person => {
+    const row = existing.get(person.id);
+    const preference = person.preferredShiftId ?? null;
+    const usePreference = preference && (forcePreferred || !row || row.rosterPreferredShiftId !== preference);
+    let shiftId = usePreference ? preference : row?.shiftId ?? shifts[0].id;
+    if (!shifts.some(s => s.id === shiftId)) {
+      if (shifts.length < 12) shifts.push({ ...defaultShift(), id: shiftId, name: `Turno ${shiftId}` });
+      else shiftId = shifts[0].id;
+    }
+    return { ...row, personId: person.id, name: person.name, jobTitle: person.jobTitle ?? "", shiftId, rosterPreferredShiftId: preference,
+      fixedRestDay: isPharmacist(person.jobTitle ?? "") ? row?.fixedRestDay ?? null : null,
+      days: row?.days ?? monthDays(plan.month).map(() => "F") };
+  });
+  shifts.sort((a, b) => a.id - b.id);
+  return { ...plan, shifts, rows };
+}
 const states = ["T", "F", "V", "A"];
 const text = (value, max) => typeof value === "string" && value.trim() && value.length <= max;
 export const isPharmacist = job => /^farmac[eê]utic[oa]$/i.test(job.trim());

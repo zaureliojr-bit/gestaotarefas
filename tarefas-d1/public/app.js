@@ -19,7 +19,7 @@ let saving = false;
 let loading = false;
 const isAdmin = () => viewer?.role === "office";
 const accessRoles = { office: "Escritório", network_manager: "Gestor de rede", manager: "Gestor de unidade", employee: "Colaborador" };
-const scheduleUI = setupSchedules({ api, notify, getData: () => data, getViewer: () => viewer, sync });
+const scheduleUI = setupSchedules({ api, notify, getData: () => data, getViewer: () => viewer, getRevision: () => revision, sync });
 
 function showMessage(id, message) {
   const el = $(id);

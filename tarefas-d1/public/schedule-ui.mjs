@@ -1,4 +1,4 @@
-import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth, normalizeShiftTime, isPharmacist } from "./schedule.mjs";
+import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth, normalizeShiftTime, isPharmacist, reconcileRoster } from "./schedule.mjs";
 import { localDay } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
@@ -8,17 +8,19 @@ const stateNames = { T: "Trabalho", F: "Folga", V: "Férias", A: "Afastamento" }
 const fixedHolidays = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 const option = (value, label, selected = false) => `<option value="${esc(value)}"${selected ? " selected" : ""}>${esc(label)}</option>`;
 
-export function setupSchedules({ api, notify, getData, getViewer, sync }) {
+export function setupSchedules({ api, notify, getData, getViewer, getRevision, sync }) {
   let plan;
   let context;
   let requestVersion = 0;
   let busy = false;
   let dirty = false;
   let account;
+  let refreshing = false;
   let expandedCoverageShift = null;
   const error = message => { $("scheduleError").textContent = message; $("scheduleError").hidden = !message; };
   const status = () => { $("scheduleStatus").textContent = !plan ? "" : dirty ? "Alterações pendentes" : plan.status === "published" ? "Publicada" : "Rascunho"; };
   const markDirty = () => { dirty = true; plan.status = "draft"; status(); };
+  const feedback = message => { $("scheduleFeedback").textContent = message; };
   const shiftOptions = selected => plan.shifts.map(s => option(s.id, `${s.name} · ${s.start}–${shiftEnd(s)}`, s.id === selected)).join("");
   const jobs = () => [...new Set([...context.people.map(p => p.jobTitle), ...plan.rows.map(p => p.jobTitle)].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const jobKey = value => value.trim().toLocaleLowerCase("pt-BR");
@@ -53,7 +55,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const days = monthDays(month);
     const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
       const previous = template?.rows.find(r => r.personId === p.id);
-      return { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, previous?.shiftId), fixedRestDay: isPharmacist(p.jobTitle) ? previous?.fixedRestDay ?? null : null, days: days.map(() => "T") };
+      return { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, previous?.shiftId), rosterPreferredShiftId: p.preferredShiftId ?? null, fixedRestDay: isPharmacist(p.jobTitle) ? previous?.fixedRestDay ?? null : null, days: days.map(() => "T") };
     });
     return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), restPattern: template?.restPattern ?? "separate", status: "draft" };
   }
@@ -75,6 +77,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     dirty = false;
     status();
     error("");
+    feedback("");
     if (!unit || !validMonth(month) || month < "2026-12") return error("Selecione a filial e um mês a partir de dezembro de 2026.");
     try {
       const result = await api(endpoint());
@@ -82,6 +85,10 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
       context = result;
       const stored = result.plans.find(p => p.month === month);
       plan = structuredClone(stored ?? newPlan(month, unit));
+      if (stored && plan.status !== "published") {
+        const updated = reconcileRoster(plan, context.people);
+        if (JSON.stringify(updated) !== JSON.stringify(plan)) { plan = updated; markDirty(); feedback("Equipe sincronizada com o cadastro. Gere a escala para recalcular as folgas."); }
+      }
       if (!stored && plan.rows.length) plan = generatePlan(plan, context.plans);
       $("scheduleEditor").hidden = false;
       render();
@@ -114,9 +121,11 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleValidationCount").textContent = `${report.issues.length} conflitos · ${report.warnings.length} avisos`;
     const findings = [...report.issues.map(s => `<li class="schedule-issue">${esc(s)}</li>`), ...report.warnings.map(s => `<li>${esc(s)}</li>`)].join("");
     $("scheduleValidation").innerHTML = findings ? `<ul>${findings}</ul>` : '<p class="task-meta">Nenhum conflito nas regras verificadas.</p>';
-    $("schedulePublish").disabled = busy || !plan.rows.length || !!report.issues.length;
-    $("scheduleSave").disabled = busy;
-    $("scheduleGenerate").disabled = busy || !plan.rows.length;
+    $("schedulePublish").disabled = busy || refreshing;
+    $("schedulePublishHint").textContent = plan.status === "published" && !dirty ? "Escala publicada e salva na rede. Disponível para consulta e exportação pela gestão." : report.issues.length ? `Publicação pendente: corrija ${report.issues.length} conflito(s) obrigatório(s). É possível salvar o rascunho.` : "Publique para registrar a versão final da escala na rede.";
+    $("scheduleSave").disabled = busy || refreshing;
+    $("scheduleGenerate").disabled = busy || refreshing;
+    $("scheduleRoster").disabled = busy || refreshing;
     status();
   }
   function changeSelection() {
@@ -157,7 +166,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
       if (!person || rule?.shiftId !== shiftId || jobKey(person.jobTitle) !== jobKey(rule.jobTitle)) return;
       person.shiftId = shiftId;
     } else {
-      if (!input.dataset.ruleField || !input.checkValidity()) return render();
+      if (!input.dataset.ruleField || !input.checkValidity() || !input.value.trim()) return render();
       const rule = plan.coverage[Number(input.closest("[data-rule]").dataset.rule)];
       rule[input.dataset.ruleField] = input.dataset.ruleField === "jobTitle" ? input.value : Number(input.value);
     }
@@ -184,7 +193,16 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleTable").onchange = e => { const input = e.target; if (input.dataset.personShift) plan.rows.find(r => r.personId === Number(input.dataset.personShift)).shiftId = Number(input.value); else if (input.dataset.person) plan.rows.find(r => r.personId === Number(input.dataset.person)).days[Number(input.dataset.day)] = input.value; else return; markDirty(); render(); };
   $("scheduleAddHoliday").onclick = () => { const day = $("scheduleHoliday").value; if (!monthDays(plan.month).includes(day) || plan.holidays.includes(day)) return; plan.holidays.push(day); plan.holidays.sort(); markDirty(); render(); };
   $("scheduleHolidays").onclick = e => { const day = e.target.dataset.removeHoliday; if (!day) return; plan.holidays = plan.holidays.filter(d => d !== day); markDirty(); render(); };
-  $("scheduleGenerate").onclick = () => { plan = generatePlan(plan, context.plans); markDirty(); render(); };
+  $("scheduleGenerate").onclick = async () => {
+    if (!await refreshRoster(false, true)) return;
+    try {
+      if (!plan.rows.length) return error("Nenhum funcionário ativo nesta filial.");
+      plan = generatePlan(plan, context.plans); markDirty(); render();
+      const report = analyzePlan(plan, context.plans);
+      feedback(`Escala recalculada para ${plan.rows.length} funcionário(s). ${report.issues.length} conflito(s) e ${report.warnings.length} aviso(s).`);
+      notify("Escala atualizada.");
+    } catch (e) { error(e.message); }
+  };
   $("scheduleFixedRest").onchange = e => {
     const row = plan.rows.find(r => r.personId === Number(e.target.dataset.fixedRest));
     if (!row || !isPharmacist(row.jobTitle)) return;
@@ -192,25 +210,44 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     markDirty(); render();
   };
   $("scheduleRestPattern").onchange = () => { plan.restPattern = $("scheduleRestPattern").value; markDirty(); render(); };
+  async function refreshRoster(forcePreferred = false, editingPublished = false) {
+    if (!plan || busy || refreshing) return false;
+    refreshing = true;
+    error("");
+    render();
+    const version = requestVersion;
+    try {
+      const fresh = await api(endpoint());
+      if (version !== requestVersion) return false;
+      if (JSON.stringify(fresh.plans) !== JSON.stringify(context.plans)) {
+        if (dirty) { const message = "As escalas foram alteradas em outra sessão. Recarregue para evitar sobrescrever os dados."; error(message); feedback(message); return false; }
+        plan = structuredClone(fresh.plans.find(p => p.month === plan.month) ?? plan);
+      }
+      context = fresh;
+      const updated = reconcileRoster(plan, fresh.people, forcePreferred);
+      if (JSON.stringify(updated) !== JSON.stringify(plan)) {
+        if (plan.status === "published" && !editingPublished) feedback("O cadastro mudou. Gere novamente para atualizar a escala publicada.");
+        else { plan = updated; markDirty(); feedback("Equipe sincronizada com o cadastro."); }
+      }
+      return true;
+    } catch (e) { if (version === requestVersion) { error(e.message); feedback(e.message); } return false; }
+    finally { refreshing = false; if (version === requestVersion) render(); }
+  }
   $("scheduleRoster").onclick = async () => {
     if (!window.confirm("Atualizar funcionários ativos e aplicar os turnos padrão do cadastro? Os dias dos funcionários mantidos serão preservados.")) return;
-    try {
-      const version = requestVersion;
-      const fresh = await api(endpoint());
-      if (version !== requestVersion) return;
-      if (JSON.stringify(fresh.plans) !== JSON.stringify(context.plans)) return error("As escalas foram alteradas em outra sessão. Recarregue antes de atualizar a equipe.");
-      context = fresh;
-    } catch (e) { return error(e.message); }
-    const existing = new Map(plan.rows.map(r => [r.personId, r]));
-    plan.rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
-      const row = existing.get(p.id);
-      const shiftId = preferredShift(p, plan.shifts, row?.shiftId);
-      return row ? { ...row, name: p.name, jobTitle: p.jobTitle, shiftId, fixedRestDay: isPharmacist(p.jobTitle) ? row.fixedRestDay ?? null : null } : { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId, days: monthDays(plan.month).map(() => "F") };
-    });
-    markDirty(); render();
+    if (await refreshRoster(true, true)) { feedback("Equipe atualizada. Gere a escala para recalcular as folgas."); notify("Equipe atualizada."); }
   };
   async function save(publish) {
-    if (busy || !plan) return;
+    if (!await refreshRoster(false, true)) return;
+    if (publish) {
+      const report = analyzePlan(plan, context.plans);
+      if (!plan.rows.length || report.issues.length) {
+        feedback(!plan.rows.length ? "Cadastre funcionários antes de publicar." : `Publicação bloqueada: ${report.issues.length} conflito(s). Confira a validação abaixo.`);
+        $("scheduleValidation").scrollIntoView({ behavior: "smooth", block: "center" });
+        notify("Verifique os conflitos antes de publicar.");
+        return;
+      }
+    }
     busy = true; error(""); render();
     $("scheduleEditor").inert = true; $("scheduleUnit").disabled = true; $("scheduleMonth").disabled = true; $("scheduleReload").disabled = true;
     const version = requestVersion;
@@ -218,9 +255,10 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
       const result = await api(endpoint(), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision: context.revision, plan: { ...plan, status: publish ? "published" : "draft" } }) });
       if (version !== requestVersion) return;
       context = result; plan = structuredClone(result.plans.find(p => p.month === plan.month)); dirty = false;
+      feedback(publish ? "Escala publicada com sucesso e salva na rede." : "Rascunho salvo com sucesso.");
       notify(publish ? "Escala publicada." : "Rascunho salvo.");
       sync();
-    } catch (e) { if (version === requestVersion) error(e.message); }
+    } catch (e) { if (version === requestVersion) { error(e.message); feedback(`Não foi possível salvar: ${e.message}`); } }
     finally { busy = false; $("scheduleEditor").inert = false; $("scheduleMonth").disabled = false; $("scheduleReload").disabled = false; setupUnitOptions(); render(); }
   }
   $("scheduleSave").onclick = () => save(false);
@@ -234,7 +272,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const a = document.createElement("a"); a.href = url; a.download = `escala-${plan.unitId}-${plan.month}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return {
-    open() { if (!allowed()) return; setupUnitOptions(); if (!$("scheduleMonth").value) $("scheduleMonth").value = localDay().slice(0, 7) < "2026-12" ? "2026-12" : localDay().slice(0, 7); if (!plan || plan.unitId !== $("scheduleUnit").value) load(); },
+    open() { if (!allowed()) return; setupUnitOptions(); if (!$("scheduleMonth").value) $("scheduleMonth").value = localDay().slice(0, 7) < "2026-12" ? "2026-12" : localDay().slice(0, 7); if (!plan || plan.unitId !== $("scheduleUnit").value) load(); else if (!busy && !refreshing && getRevision() !== context?.revision) refreshRoster(); },
     accountChanged() { const viewer = getViewer(); const identity = `${viewer?.email}|${viewer?.role}|${viewer?.unitId}`; if (account !== identity) { account = identity; requestVersion++; plan = context = undefined; dirty = false; $("scheduleEditor").hidden = true; } },
   };
 }
