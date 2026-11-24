@@ -41,6 +41,7 @@
         <button class="nav-btn" data-page="units" data-admin><span>⌂</span> Unidades</button>
         <button class="nav-btn" data-page="departments" data-admin><span>▤</span> Departamentos</button>
         <button class="nav-btn" data-page="people" data-admin><span>♙</span> Funcionários</button>
+        <button class="nav-btn" data-page="schedules" data-schedule><span>▦</span> Escalas e folgas</button>
         <button class="nav-btn" data-page="access" data-admin><span>▣</span> Usuários e acessos</button>
         <button class="nav-btn" data-page="reports"><span>▥</span> Relatórios</button>
         <button class="nav-btn" data-page="notes"><span aria-hidden="true">▤</span> Bloco de notas</button>
@@ -119,6 +120,28 @@
           <div class="page-heading"><div><h1>Funcionários</h1><p>Cadastre e organize os colaboradores por unidade.</p></div><div class="person-actions"><button class="btn btn-light" id="importPeople">Importar funcionários</button><button class="btn btn-primary" id="addPerson">＋ Novo funcionário</button></div></div>
           <div class="filters"><input id="searchPeople" type="search" placeholder="Buscar por nome ou cargo" aria-label="Buscar funcionários"><select id="filterPeopleJob" aria-label="Cargo"><option value="">Todos os cargos</option></select><select id="filterPeopleStatus" aria-label="Situação"><option value="">Todas as situações</option><option>Ativo</option><option>Férias</option><option>Afastado</option><option>Desligado</option></select></div>
           <article class="card table-wrap"><table><thead><tr><th>Nome</th><th>Unidade</th><th>Cargo</th><th>Situação</th><th>E-mail</th><th>Departamento</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="peopleTable"></tbody></table></article>
+        </section>
+
+        <section class="page" id="page-schedules" data-schedule>
+          <div class="page-heading"><div><h1>Escalas e folgas</h1><p>Planejamento mensal 5×2 por filial e turno.</p></div><span id="scheduleStatus" class="tag"></span></div>
+          <div class="filters card schedule-controls">
+            <label>Filial<select id="scheduleUnit"></select></label><label>Mês<input id="scheduleMonth" type="month" min="2026-12" max="2099-12"></label>
+            <button class="btn btn-light" id="scheduleReload" type="button">Recarregar</button>
+          </div>
+          <p id="scheduleError" class="form-error" role="alert" hidden></p>
+          <div id="scheduleEditor" hidden>
+            <div class="schedule-config">
+              <article class="card"><div class="card-heading"><h2>Turnos e cobertura mínima</h2><button class="btn btn-light" id="scheduleAddShift" type="button">＋ Turno</button></div><div id="scheduleShifts"></div></article>
+              <article class="card"><div class="card-heading"><h2>Cobertura por cargo</h2><button class="btn btn-light" id="scheduleAddCoverage" type="button">＋ Regra</button></div><div id="scheduleCoverageRules"></div></article>
+            </div>
+            <article class="card"><div class="card-heading"><h2 id="scheduleHeading">Funcionários e dias de trabalho</h2><div class="person-actions"><button class="btn btn-light" id="scheduleRoster" type="button">Atualizar equipe</button><button class="btn btn-primary" id="scheduleGenerate" type="button">Gerar escala 5×2</button></div></div>
+              <p id="scheduleHours" class="task-meta"></p><p id="scheduleShiftSummary" class="task-meta"></p><p class="task-meta">T = trabalho · F = folga · V = férias · A = afastamento. Ajuste cada dia ou turno na tabela.</p>
+              <div class="schedule-holidays"><label>Feriado adicional <input id="scheduleHoliday" type="date"></label><button class="btn btn-light" id="scheduleAddHoliday" type="button">Adicionar</button><span id="scheduleHolidays"></span></div>
+              <div class="schedule-table-wrap" id="scheduleTable"></div>
+              <div class="schedule-actions"><button class="btn btn-light" id="scheduleSave" type="button">Salvar rascunho</button><button class="btn btn-primary" id="schedulePublish" type="button">Publicar escala</button><button class="btn btn-light" id="scheduleExport" type="button">Exportar CSV</button><button class="btn btn-light" id="schedulePrint" type="button">Imprimir / PDF</button></div>
+            </article>
+            <article class="card"><div class="card-heading"><h2>Validação da escala</h2><span id="scheduleValidationCount" class="tag"></span></div><div id="scheduleValidation"></div></article>
+          </div>
         </section>
 
         <section class="page" id="page-access" data-admin>

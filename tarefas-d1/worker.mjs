@@ -1,5 +1,6 @@
 import { handleAuth, sessionViewer } from "./auth.mjs";
 import { normalize, generateCashTasks, localDay, STATUSES, CHECKLIST } from "./public/model.mjs";
+import { validatePlan, analyzePlan } from "./public/schedule.mjs";
 
 const MAX_BYTES = 512 * 1024;
 const encoder = new TextEncoder();
@@ -321,6 +322,38 @@ async function writeState(request, db, viewer, taskId) {
   return json(snapshot(next, current.revision + 1, viewer));
 }
 
+async function schedules(request, db, viewer) {
+  if (!["office", "network_manager", "manager"].includes(viewer.role)) throw new HttpError(403, "Acesso reservado à gestão.");
+  const current = await load(db);
+  checkUnitAccess(current.data, viewer);
+  const unitId = new URL(request.url).searchParams.get("unit");
+  if (!current.data.units.some(unit => unit.id === unitId && unit.store) ||
+      (!networkAccess(viewer.role) && viewer.unitId !== unitId)) throw new HttpError(403, "Unidade indisponível.");
+  const people = current.data.people.filter(p => p.unitId === unitId).map(p => ({
+    id: p.id, name: p.name, jobTitle: p.jobTitle ?? "", employmentStatus: p.employmentStatus ?? "Ativo"
+  }));
+  const unitPlans = current.data.schedules.filter(p => p.unitId === unitId);
+  if (request.method === "GET") return json({ revision: current.revision, people, plans: unitPlans });
+  const incoming = await body(request);
+  if (incoming.revision !== current.revision) throw new HttpError(409, "Os dados mudaram. Recarregue a escala antes de salvar.");
+  const plan = incoming.plan;
+  try { validatePlan(plan); } catch (error) { throw new HttpError(400, error.message); }
+  if (plan.unitId !== unitId) throw new HttpError(400, "Unidade incompatível.");
+  const existing = unitPlans.find(p => p.month === plan.month);
+  const roster = new Map(people.map(p => [p.id, p]));
+  for (const row of plan.rows) {
+    const person = roster.get(row.personId) ?? existing?.rows.find(r => r.personId === row.personId);
+    if (!person) throw new HttpError(400, "Funcionário fora da unidade.");
+    row.name = person.name;
+    row.jobTitle = person.jobTitle;
+  }
+  if (plan.status === "published" && (!plan.rows.length || analyzePlan(plan, unitPlans).issues.length)) throw new HttpError(400, "Resolva os conflitos antes de publicar.");
+  current.data.schedules = current.data.schedules.filter(p => p.unitId !== unitId || p.month !== plan.month);
+  current.data.schedules.push(plan);
+  if (!await persist(db, current.revision, current.data)) throw new HttpError(409, "Os dados mudaram. Recarregue antes de salvar.");
+  return json({ revision: current.revision + 1, people, plans: current.data.schedules.filter(p => p.unitId === unitId) });
+}
+
 async function preferences(request, db, viewer) {
   if (request.method === "GET") {
     const row = await db.prepare("SELECT tema FROM tarefas_preferencias WHERE email = ?").bind(viewer.email).first();
@@ -478,6 +511,7 @@ export default {
         });
       }
       const viewer = await getViewer(request, env);
+      if (path === "/api/schedules" && ["GET", "PUT"].includes(request.method)) return await schedules(request, env.DB, viewer);
       if (path === "/api/chat" && ["GET", "POST"].includes(request.method)) {
         return await chat(request, env.DB, viewer);
       }

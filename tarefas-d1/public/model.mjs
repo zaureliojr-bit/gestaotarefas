@@ -1,3 +1,5 @@
+import { validatePlan } from "./schedule.mjs";
+
 const INITIAL_UNITS = [
   { id: "vila-sao-pedro", name: "Vila São Pedro", store: true },
   { id: "parque-sao-bernardo", name: "Parque São Bernardo", store: true },
@@ -82,13 +84,18 @@ export function normalize(raw) {
   if (cashDepartmentId !== null && !departments.has(cashDepartmentId)) {
     throw new Error("Departamento de fechamento inválido");
   }
+  const schedules = raw.schedules ?? [];
+  if (!Array.isArray(schedules) || schedules.some(plan => !unitById.get(plan?.unitId)?.store) ||
+      new Set(schedules.map(plan => `${plan.unitId}:${plan.month}`)).size !== schedules.length) throw new Error("Escalas inválidas");
+  schedules.forEach(validatePlan);
   return {
     units: units.map(unit => ({ id: unit.id, name: unit.name.trim(), store: unit.store })),
     departments: raw.departments,
     people: raw.people,
     tasks: raw.tasks.map(t => ({ ...t, unitId: t.unitId ?? null })),
     cashRoutines: routines,
-    cashDepartmentId
+    cashDepartmentId,
+    schedules
   };
 }
 
