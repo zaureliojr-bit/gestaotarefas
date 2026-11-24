@@ -15,6 +15,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   let busy = false;
   let dirty = false;
   let account;
+  let expandedCoverageShift = null;
   const error = message => { $("scheduleError").textContent = message; $("scheduleError").hidden = !message; };
   const status = () => { $("scheduleStatus").textContent = !plan ? "" : dirty ? "Alterações pendentes" : plan.status === "published" ? "Publicada" : "Rascunho"; };
   const markDirty = () => { dirty = true; plan.status = "draft"; status(); };
@@ -67,6 +68,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleEditor").hidden = true;
     plan = undefined;
     context = undefined;
+    expandedCoverageShift = null;
     dirty = false;
     status();
     error("");
@@ -92,7 +94,8 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleCoverageRules").innerHTML = plan.shifts.map(shift => {
       const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
       const count = plan.rows.filter(r => r.shiftId === shift.id).length;
-      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><div><strong>${esc(shift.name)}</strong><small>${esc(shift.start)}–${esc(shiftEnd(shift))} · ${count} funcionário(s) no turno</small></div><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button>${renderRulePeople(shift, c)}</div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</section>`;
+      const expanded = expandedCoverageShift === shift.id;
+      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><button class="schedule-coverage-toggle" type="button" data-toggle-coverage="${shift.id}" aria-expanded="${expanded}" aria-controls="coverage-shift-${shift.id}"><span aria-hidden="true">${expanded ? "▾" : "▸"}</span><div><strong>${esc(shift.name)}</strong><small>${esc(shift.start)}–${esc(shiftEnd(shift))} · ${count} funcionário(s) · ${rules.length} cargo(s)</small></div></button><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div><div id="coverage-shift-${shift.id}"${expanded ? "" : " hidden"}>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button>${renderRulePeople(shift, c)}</div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</div></section>`;
     }).join("");
     $("scheduleHoliday").min = days[0]; $("scheduleHoliday").max = days.at(-1);
     $("scheduleHolidays").innerHTML = plan.holidays.map(d => `<button type="button" class="small-btn" data-remove-holiday="${d}">${d.slice(-2)} ×</button>`).join(" ");
@@ -118,7 +121,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleUnit").onchange = changeSelection;
   $("scheduleMonth").onchange = changeSelection;
   $("scheduleReload").onclick = changeSelection;
-  $("scheduleAddShift").onclick = () => { if (plan.shifts.length >= 12) return; const id = Math.max(...plan.shifts.map(s => s.id)) + 1; plan.shifts.push({ ...defaultShift(), id, name: `Turno ${id}` }); markDirty(); render(); };
+  $("scheduleAddShift").onclick = () => { if (plan.shifts.length >= 12) return; const id = Math.max(...plan.shifts.map(s => s.id)) + 1; plan.shifts.push({ ...defaultShift(), id, name: `Turno ${id}` }); expandedCoverageShift = null; markDirty(); render(); };
   $("scheduleShifts").onchange = e => {
     const input = e.target;
     if (!input.dataset.field) return;
@@ -143,11 +146,19 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     markDirty(); render();
   };
   $("scheduleCoverageRules").onclick = e => {
+    const toggle = e.target.closest("[data-toggle-coverage]");
+    if (toggle) {
+      const id = Number(toggle.dataset.toggleCoverage);
+      expandedCoverageShift = expandedCoverageShift === id ? null : id;
+      render();
+      return;
+    }
     const shiftId = Number(e.target.dataset.addCoverage);
     if (shiftId) {
       const job = availableJobs(shiftId)[0];
       if (!job || plan.coverage.length >= 40) return;
       plan.coverage.push({ shiftId, jobTitle: job, minimum: 1 });
+      expandedCoverageShift = shiftId;
     } else if (e.target.dataset.deleteRule !== undefined) plan.coverage.splice(Number(e.target.dataset.deleteRule), 1);
     else return;
     markDirty(); render();
