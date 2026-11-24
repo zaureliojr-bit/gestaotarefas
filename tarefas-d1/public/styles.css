@@ -86,3 +86,29 @@
 
 .chat-image-link{display:block;margin:8px 0}
 .chat-image{display:block;max-width:100%;width:auto;max-height:260px;object-fit:contain;border-radius:8px}
+
+.schedule-controls label,.schedule-shift label,.schedule-rule label,.schedule-holidays label{display:grid;gap:5px;font-size:11px;font-weight:700;color:var(--muted)}
+.schedule-controls{align-items:end;grid-template-columns:2fr 1fr auto}
+.schedule-config{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
+.schedule-shift,.schedule-rule{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;align-items:end;padding:12px 0;border-top:1px solid var(--line)}
+.schedule-rule{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 70px auto}
+.schedule-shift small{grid-column:1/-1;color:var(--muted);font-size:11px}
+.schedule-shift input,.schedule-rule input,.schedule-rule select,.schedule-holidays input,.schedule-grid select{min-width:0;width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:transparent;font-size:11px}
+.schedule-holidays,.schedule-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0}
+.schedule-holidays label{display:flex;align-items:center}
+.schedule-table-wrap{max-width:100%;overflow:auto;max-height:65vh;border:1px solid var(--line);border-radius:8px}
+.schedule-grid{min-width:max-content;width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
+.schedule-grid th,.schedule-grid td{padding:6px 3px;text-align:center;border-bottom:1px solid var(--line);border-right:1px solid var(--line);white-space:nowrap}
+.schedule-grid thead th{position:sticky;top:0;background:var(--bg);z-index:3;color:var(--ink)}
+.schedule-grid tr>th:first-child{position:sticky;left:0;min-width:184px;max-width:220px;text-align:left;background:var(--bg);z-index:2;padding:8px;white-space:normal}
+.schedule-grid thead th:first-child{z-index:4}
+.schedule-grid th small{display:block;font-size:10px;color:var(--muted);font-weight:400;margin:3px 0}
+.schedule-grid th select{max-width:150px}
+.schedule-grid .schedule-day{width:38px;padding:5px 1px;text-align:center;font-weight:700;appearance:none;cursor:pointer}
+.schedule-day.state-T{background:#e3f6ed;color:#16805b}.schedule-day.state-F{background:#e8f0ff;color:#2457a8}.schedule-day.state-V{background:#fff3d9;color:#94630e}.schedule-day.state-A{background:#fbe6e6;color:#b33a3a}
+.schedule-grid thead .schedule-holiday{background:#fff0dc;color:#a35d12}.schedule-grid .schedule-short{background:#fbe6e6;color:#b33a3a;font-weight:700}
+.schedule-total td{font-weight:700;background:var(--bg)}
+#scheduleValidation ul{max-height:260px;overflow:auto;padding-left:20px;font-size:12px;line-height:1.65}.schedule-issue{color:#c23b3b}
+@media(max-width:1100px){.schedule-config{grid-template-columns:1fr}}
+@media(max-width:700px){.schedule-controls{grid-template-columns:1fr}.schedule-shift{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-rule{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-grid tr>th:first-child{min-width:148px}}
+@media print{body:has(#page-schedules.active) .sidebar,body:has(#page-schedules.active) .topbar,body:has(#page-schedules.active) .schedule-config,body:has(#page-schedules.active) .schedule-controls,body:has(#page-schedules.active) .schedule-actions,body:has(#page-schedules.active) .schedule-holidays,body:has(#page-schedules.active) #scheduleGenerate,body:has(#page-schedules.active) #scheduleValidation{display:none!important}body:has(#page-schedules.active) .content{max-width:none;padding:0}body:has(#page-schedules.active) .schedule-table-wrap{max-height:none;overflow:visible;border:0}body:has(#page-schedules.active) .schedule-grid{width:100%;min-width:0;font-size:6px}body:has(#page-schedules.active) .schedule-grid tr>th:first-child{min-width:70px;position:static}body:has(#page-schedules.active) .schedule-grid th,body:has(#page-schedules.active) .schedule-grid td{padding:1px}body:has(#page-schedules.active) .schedule-grid select{font-size:7px;width:100%;padding:0;appearance:none}body:has(#page-schedules.active) .schedule-grid .schedule-day{width:auto;min-width:12px}body:has(#page-schedules.active) .schedule-grid th small{font-size:6px}body:has(#page-schedules.active) .schedule-grid thead th{position:static}body:has(#page-schedules.active) .card{padding:4px;border:0}body:has(#page-schedules.active){print-color-adjust:exact;-webkit-print-color-adjust:exact}}

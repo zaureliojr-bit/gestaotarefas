@@ -1,4 +1,5 @@
 import { STATUSES, CHECKLIST, localDay, normalize, nextId, unitNameKey, importEmployees } from "./model.mjs";
+import { setupSchedules } from "./schedule-ui.mjs";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -18,6 +19,7 @@ let saving = false;
 let loading = false;
 const isAdmin = () => viewer?.role === "office";
 const accessRoles = { office: "Escritório", network_manager: "Gestor de rede", manager: "Gestor de unidade", employee: "Colaborador" };
+const scheduleUI = setupSchedules({ api, notify, getData: () => data, getViewer: () => viewer, sync });
 
 function showMessage(id, message) {
   const el = $(id);
@@ -43,6 +45,10 @@ function applySnapshot(snapshot) {
   revision = snapshot.revision;
   const accountChanged = viewer?.email !== snapshot.viewer.email;
   viewer = snapshot.viewer;
+  scheduleUI.accountChanged();
+  const canSchedule = ["office", "network_manager", "manager"].includes(viewer.role);
+  document.querySelectorAll("[data-schedule]").forEach(el => { el.hidden = !canSchedule; });
+  if (!canSchedule && $("page-schedules").classList.contains("active")) showPage("overview");
   if (accountChanged) {
     applyTheme("light");
     loadTheme();
@@ -61,6 +67,7 @@ function applySnapshot(snapshot) {
     if (document.querySelector(".page.active[data-admin]")) showPage("overview");
   }
   render();
+  if (canSchedule && $("page-schedules").classList.contains("active")) scheduleUI.open();
 }
 
 function postAuth(route, data) {
@@ -156,14 +163,15 @@ const nextAction = {
 function showPage(name) {
   document.querySelectorAll(".page").forEach(page => page.classList.toggle("active", page.id === "page-" + name));
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.toggle("active", button.dataset.page === name));
-  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", access: "Usuários e acessos", reports: "Relatórios", notes: "Bloco de notas", chat: "Chat geral" };
+  const titles = { overview: "Visão geral", tasks: "Tarefas", units: "Unidades", departments: "Departamentos", people: "Funcionários", schedules: "Escalas e folgas", access: "Usuários e acessos", reports: "Relatórios", notes: "Bloco de notas", chat: "Chat geral" };
   $("pageTitle").textContent = titles[name];
   $("breadcrumb").textContent = titles[name];
   $("sidebar").classList.remove("open");
-  $("unitToolbar").hidden = name === "notes" || name === "chat";
+  $("unitToolbar").hidden = name === "notes" || name === "chat" || name === "schedules";
   if (name === "access") loadAccessUsers();
   if (name === "notes") loadNotes();
   if (name === "chat") refreshChat();
+  if (name === "schedules") scheduleUI.open();
 }
 
 document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => showPage(b.dataset.page));
