@@ -631,12 +631,12 @@ function renderPeople() {
     (!status || (p.employmentStatus ?? "Ativo") === status) &&
     (!job || unitNameKey(p.jobTitle ?? "") === job) && `${p.name} ${p.jobTitle ?? ""}`.toLocaleLowerCase("pt-BR").includes(query));
   $("peopleTable").innerHTML = people.map(p =>
-    `<tr><td><b>${esc(p.name)}</b></td><td>${esc(unitName(p.unitId))}</td><td>${esc(p.jobTitle || "–")}</td><td>${esc(p.employmentStatus ?? "Ativo")}</td><td>${esc(p.email || "–")}</td><td>${esc(deptName(p.departmentId))}</td>
+    `<tr><td><b>${esc(p.name)}</b></td><td>${esc(unitName(p.unitId))}</td><td>${esc(p.jobTitle || "–")}</td><td>${p.preferredShiftId ? `Turno ${p.preferredShiftId}` : "A definir"}</td><td>${esc(p.employmentStatus ?? "Ativo")}</td><td>${esc(p.email || "–")}</td><td>${esc(deptName(p.departmentId))}</td>
       <td>${esc(p.role)}</td><td><div class="person-actions">
         <button class="small-btn" data-edit-person="${p.id}" aria-label="Editar funcionário ${esc(p.name)}">Editar</button>
         <button class="small-btn" data-delete-person="${p.id}">Excluir</button>
       </div></td></tr>`
-  ).join("") || '<tr><td colspan="8" class="empty">Nenhum funcionário encontrado.</td></tr>';
+  ).join("") || '<tr><td colspan="9" class="empty">Nenhum funcionário encontrado.</td></tr>';
 }
 $("searchPeople").oninput = renderPeople;
 $("filterPeopleStatus").onchange = renderPeople;
@@ -975,6 +975,8 @@ function openPerson(person) {
   $("personDepartment").value = person?.departmentId ?? "";
   $("personUnit").value = person ? person.unitId ?? "" : $("filterUnit").value === "none" ? "" : $("filterUnit").value;
   $("personJob").value = person?.jobTitle ?? "";
+  $("personShift").innerHTML = '<option value="">A definir</option>' + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">Turno ${i + 1}</option>`).join("");
+  $("personShift").value = person?.preferredShiftId ?? "";
   $("personEmploymentStatus").value = person?.employmentStatus ?? "Ativo";
   $("personRole").value = person?.role ?? "Funcionário";
   showMessage("personError", "");
@@ -1059,6 +1061,7 @@ $("personForm").addEventListener("submit", async event => {
   const role = $("personRole").value;
   const unitId = $("personUnit").value;
   const jobTitle = $("personJob").value.trim();
+  const preferredShiftId = Number($("personShift").value) || null;
   const employmentStatus = $("personEmploymentStatus").value;
   if (!name || !unitId) {
     showMessage("personError", "Preencha o nome e selecione a unidade.");
@@ -1070,7 +1073,7 @@ $("personForm").addEventListener("submit", async event => {
   }
   if (await commit(next => {
     const person = next.people.find(p => p.id === id);
-    const fields = { name, email, departmentId, role, unitId, jobTitle, employmentStatus };
+    const fields = { name, email, departmentId, role, unitId, jobTitle, employmentStatus, preferredShiftId };
     if (person) Object.assign(person, fields);
     else next.people.push({ id: nextId(next.people), ...fields });
   }, id ? "Funcionário atualizado." : "Funcionário cadastrado.", "personError")) {
