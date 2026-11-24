@@ -386,4 +386,9 @@ assert.ok(analyzePlan(threeDaysOff).issues.some(issue => issue.includes("3 folga
 const consecutiveDaysOff = structuredClone(separated);
 consecutiveDaysOff.rows[0].days.splice(5, 2, "F", "F");
 assert.ok(analyzePlan(consecutiveDaysOff).issues.some(issue => issue.includes("2 folgas seguidas")));
+const monthly = generatePlan({ ...plan, restPattern: "separate", shifts: [{ ...defaultShift(), minimum: 2 }], rows: Array.from({ length: 8 }, (_, i) => ({ personId: i + 1, name: `Pessoa ${i + 1}`, jobTitle: "Atendente", shiftId: 1, days: monthDays("2026-12").map(() => "T") })) });
+assert.ok(monthly.rows.every(row => row.days.filter(state => state === "F").length === 8));
+const followingMonth = generatePlan({ ...monthly, month: "2027-01", holidays: [], rows: monthly.rows.map(row => ({ ...row, days: monthDays("2027-01").map(() => "T") })) }, [monthly]);
+assert.equal(analyzePlan(monthly, [followingMonth]).issues.length, 0);
+assert.equal(analyzePlan(followingMonth, [monthly]).issues.length, 0);
 console.log("OK: geração 5×2, continuidade entre meses, cobertura, publicação, controle de revisão e permissões de escala.");

@@ -123,10 +123,24 @@ export function generatePlan(plan, neighbors = []) {
     for (const row of order) {
       const shift = plan.shifts.find(s => s.id === row.shiftId);
       const fixed = weekDays.map(day => day.startsWith(plan.month) ? (dayState(history, row.personId, day, neighbors) === "V" || dayState(history, row.personId, day, neighbors) === "A" ? dayState(history, row.personId, day, neighbors) : undefined) : dayState(history, row.personId, day, neighbors));
+      const inMonth = weekDays.map(day => day.startsWith(plan.month));
+      const partialWeek = inMonth.some(inside => !inside);
+      const lastWeek = offsetDay(week, 7) > days.at(-1);
+      const pastRest = row.days.filter((state, index) => days[index] < week && state === "F").length;
+      const futureFullWeeks = Math.floor(Math.max(0, days.filter(day => day > weekDays[6]).length) / 7);
+      const hasLaterPartial = !lastWeek && weekday(days.at(-1)) !== 6;
+      const hasAbsence = row.days.some(state => state === "V" || state === "A");
       let best; let bestScore = Infinity;
       for (const pair of candidates) {
         const pattern = weekDays.map((_, i) => fixed[i] ?? (pair.includes(i) ? "F" : "T"));
         let score = Math.abs(pattern.filter(s => s === "F").length - 2) * 10000;
+        if (partialWeek) {
+          const restInMonth = pattern.filter((state, i) => inMonth[i] && state === "F").length;
+          // Full weeks still contribute exactly two rests. Minimize only the
+          // rests belonging to this month in weeks shared with another month.
+          const desired = hasAbsence || hasLaterPartial ? 0 : Math.max(0, 8 - pastRest - futureFullWeeks * 2);
+          score += Math.abs(restInMonth - desired) * 80;
+        }
         const restLimit = plan.restPattern === "separate" ? 1 : 2;
         let restStreak = 0;
         for (let prior = offsetDay(week, -1); restStreak <= restLimit && dayState(history, row.personId, prior, neighbors) === "F"; prior = offsetDay(prior, -1)) restStreak++;
