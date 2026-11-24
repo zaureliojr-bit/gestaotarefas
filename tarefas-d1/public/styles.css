@@ -95,6 +95,10 @@
 .schedule-coverage-group{padding:12px 0;border-top:1px solid var(--line)}
 .schedule-coverage-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
 .schedule-coverage-heading small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+.schedule-rule-people{grid-column:1/-1;display:grid;gap:7px;padding:9px 10px;background:var(--bg);border-radius:8px;font-size:11px}
+.schedule-rule-people small{color:var(--muted);font-size:11px}
+.schedule-assigned-list{display:flex;flex-wrap:wrap;gap:5px}
+.schedule-person-chip{border:1px solid var(--line);background:var(--surface,#fff);color:var(--ink);border-radius:6px;padding:4px 7px;font-size:11px;overflow-wrap:anywhere}
 .schedule-shift small{grid-column:1/-1;color:var(--muted);font-size:11px}
 .schedule-shift input,.schedule-rule input,.schedule-rule select,.schedule-holidays input,.schedule-grid select{min-width:0;width:100%;padding:7px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:transparent;font-size:11px}
 .schedule-holidays,.schedule-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin:14px 0}

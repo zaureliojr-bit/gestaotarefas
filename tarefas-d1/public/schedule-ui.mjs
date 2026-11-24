@@ -18,10 +18,16 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   const error = message => { $("scheduleError").textContent = message; $("scheduleError").hidden = !message; };
   const status = () => { $("scheduleStatus").textContent = !plan ? "" : dirty ? "Alterações pendentes" : plan.status === "published" ? "Publicada" : "Rascunho"; };
   const markDirty = () => { dirty = true; plan.status = "draft"; status(); };
-  const shiftOptions = selected => plan.shifts.map(s => option(s.id, s.name, s.id === selected)).join("");
+  const shiftOptions = selected => plan.shifts.map(s => option(s.id, `${s.name} · ${s.start}–${shiftEnd(s)}`, s.id === selected)).join("");
   const jobs = () => [...new Set([...context.people.map(p => p.jobTitle), ...plan.rows.map(p => p.jobTitle)].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
   const jobKey = value => value.trim().toLocaleLowerCase("pt-BR");
   const assignedCount = (shiftId, job) => plan.rows.filter(r => r.shiftId === shiftId && jobKey(r.jobTitle) === jobKey(job)).length;
+  function renderRulePeople(shift, rule) {
+    const matching = plan.rows.filter(r => jobKey(r.jobTitle) === jobKey(rule.jobTitle));
+    const assigned = matching.filter(r => r.shiftId === shift.id);
+    const available = matching.filter(r => r.shiftId !== shift.id);
+    return `<div class="schedule-rule-people"><strong>Funcionários neste turno (${assigned.length})</strong><div class="schedule-assigned-list">${assigned.map(r => `<span class="schedule-person-chip">${esc(r.name)}</span>`).join("") || '<small>Nenhum funcionário atribuído.</small>'}</div>${available.length ? `<label>Mover funcionário para ${esc(shift.name)}<select data-assign-person="${shift.id}" data-assignment-rule="${rule.index}">${option("", "Selecionar funcionário")}${available.map(r => option(r.personId, `${r.name} · ${plan.shifts.find(s => s.id === r.shiftId)?.name ?? "Sem turno"}`)).join("")}</select></label>` : '<small>Todos os funcionários disponíveis deste cargo já estão no turno.</small>'}</div>`;
+  }
   function availableJobs(shiftId, currentIndex = -1) {
     const current = plan.coverage[currentIndex]?.jobTitle;
     const used = new Set(plan.coverage.filter((r, i) => r.shiftId === shiftId && i !== currentIndex).map(r => jobKey(r.jobTitle)));
@@ -79,7 +85,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleCoverageRules").innerHTML = plan.shifts.map(shift => {
       const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
       const count = plan.rows.filter(r => r.shiftId === shift.id).length;
-      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><div><strong>${esc(shift.name)}</strong><small>${count} funcionário(s) no turno</small></div><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button></div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</section>`;
+      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><div><strong>${esc(shift.name)}</strong><small>${esc(shift.start)}–${esc(shiftEnd(shift))} · ${count} funcionário(s) no turno</small></div><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button>${renderRulePeople(shift, c)}</div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</section>`;
     }).join("");
     $("scheduleHoliday").min = days[0]; $("scheduleHoliday").max = days.at(-1);
     $("scheduleHolidays").innerHTML = plan.holidays.map(d => `<button type="button" class="small-btn" data-remove-holiday="${d}">${d.slice(-2)} ×</button>`).join(" ");
@@ -114,7 +120,21 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     shift[input.dataset.field] = input.type === "number" ? Number(input.value) : input.value.trim(); markDirty(); render();
   };
   $("scheduleShifts").onclick = e => { const id = Number(e.target.dataset.deleteShift); if (!id || plan.rows.some(r => r.shiftId === id) || plan.shifts.length === 1) return; plan.shifts = plan.shifts.filter(s => s.id !== id); plan.coverage = plan.coverage.filter(c => c.shiftId !== id); markDirty(); render(); };
-  $("scheduleCoverageRules").onchange = e => { const input = e.target; if (!input.dataset.ruleField || !input.checkValidity()) return render(); const rule = plan.coverage[Number(input.closest("[data-rule]").dataset.rule)]; rule[input.dataset.ruleField] = input.dataset.ruleField === "jobTitle" ? input.value : Number(input.value); markDirty(); render(); };
+  $("scheduleCoverageRules").onchange = e => {
+    const input = e.target;
+    if (input.dataset.assignPerson) {
+      const shiftId = Number(input.dataset.assignPerson);
+      const rule = plan.coverage[Number(input.dataset.assignmentRule)];
+      const person = plan.rows.find(r => r.personId === Number(input.value));
+      if (!person || rule?.shiftId !== shiftId || jobKey(person.jobTitle) !== jobKey(rule.jobTitle)) return;
+      person.shiftId = shiftId;
+    } else {
+      if (!input.dataset.ruleField || !input.checkValidity()) return render();
+      const rule = plan.coverage[Number(input.closest("[data-rule]").dataset.rule)];
+      rule[input.dataset.ruleField] = input.dataset.ruleField === "jobTitle" ? input.value : Number(input.value);
+    }
+    markDirty(); render();
+  };
   $("scheduleCoverageRules").onclick = e => {
     const shiftId = Number(e.target.dataset.addCoverage);
     if (shiftId) {
