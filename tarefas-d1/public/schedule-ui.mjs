@@ -52,7 +52,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const shifts = structuredClone(template?.shifts ?? [defaultShift()]);
     const days = monthDays(month);
     const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => ({ personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, template?.rows.find(r => r.personId === p.id)?.shiftId), days: days.map(() => "T") }));
-    return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), status: "draft" };
+    return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), restPattern: template?.restPattern ?? "separate", status: "draft" };
   }
   function preferredShift(person, shifts, fallback) {
     const id = person.preferredShiftId;
@@ -86,6 +86,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   }
   function render() {
     if (!plan) return;
+    $("scheduleRestPattern").value = plan.restPattern ?? "free";
     const days = monthDays(plan.month);
     $("scheduleHeading").textContent = `${getData().units.find(u => u.id === plan.unitId)?.name ?? plan.unitId} · ${plan.month.slice(5)}/${plan.month.slice(0, 4)}`;
     $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s)} · intervalo ${s.breakMinutes} min`).join(" | ");
@@ -172,6 +173,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleAddHoliday").onclick = () => { const day = $("scheduleHoliday").value; if (!monthDays(plan.month).includes(day) || plan.holidays.includes(day)) return; plan.holidays.push(day); plan.holidays.sort(); markDirty(); render(); };
   $("scheduleHolidays").onclick = e => { const day = e.target.dataset.removeHoliday; if (!day) return; plan.holidays = plan.holidays.filter(d => d !== day); markDirty(); render(); };
   $("scheduleGenerate").onclick = () => { plan = generatePlan(plan, context.plans); markDirty(); render(); };
+  $("scheduleRestPattern").onchange = () => { plan.restPattern = $("scheduleRestPattern").value; markDirty(); render(); };
   $("scheduleRoster").onclick = async () => {
     if (!window.confirm("Atualizar funcionários ativos e aplicar os turnos padrão do cadastro? Os dias dos funcionários mantidos serão preservados.")) return;
     try {
