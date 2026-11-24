@@ -121,3 +121,38 @@ export function nextId(rows) {
   return rows.reduce((max, row) => Math.max(max, row.id), 0) + 1;
 }
 
+export function importEmployees(data, rows, mapping) {
+  let imported = 0;
+  let updated = 0;
+  let skipped = 0;
+  const conflicts = [];
+  for (const row of rows) {
+    const unitId = mapping.get(row.unit);
+    const name = row.name.trim();
+    const email = row.email.trim().toLowerCase();
+    const jobTitle = row.jobTitle.trim();
+    const byName = data.people.find(p => p.unitId === unitId && unitNameKey(p.name) === unitNameKey(name));
+    const byEmail = email && data.people.find(p => p.email.trim().toLowerCase() === email);
+    if ((byEmail && ((byName && byName.id !== byEmail.id) || (byEmail.unitId && byEmail.unitId !== unitId))) ||
+        (byName && email && byName.email && byName.email.trim().toLowerCase() !== email)) {
+      conflicts.push(name);
+      continue;
+    }
+    const existing = byEmail || byName;
+    if (existing) {
+      if (existing.unitId === unitId && existing.jobTitle === jobTitle && (existing.email || "") === (email || existing.email)) {
+        skipped++;
+        continue;
+      }
+      existing.unitId = unitId;
+      existing.jobTitle = jobTitle;
+      if (!existing.email && email) existing.email = email;
+      updated++;
+      continue;
+    }
+    data.people.push({ id: nextId(data.people), name, email, unitId, jobTitle, departmentId: null, role: "Funcionário", employmentStatus: "Ativo" });
+    imported++;
+  }
+  return { imported, updated, skipped, conflicts };
+}
+
