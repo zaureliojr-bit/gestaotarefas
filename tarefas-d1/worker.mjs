@@ -151,7 +151,9 @@ function snapshot(data, revision, viewer) {
   const units = networkAccess(viewer.role) ? data.units : data.units.filter(unit => unit.id === viewer.unitId);
   const tasks = data.tasks.filter(task => canSee(task, data, viewer));
   const assignees = new Set(tasks.map(task => task.personId));
-  const people = data.people.filter(person => assignees.has(person.id)).map(person => ({ ...person, email: "" }));
+  const people = data.people.filter(person => assignees.has(person.id)).map(person => ({
+    id: person.id, name: person.name, departmentId: person.departmentId, role: person.role, email: ""
+  }));
   const departmentIds = new Set([...tasks, ...people].map(record => record.departmentId));
   const departments = data.departments.filter(dept => departmentIds.has(dept.id));
   return { data: { units, tasks, people, departments, cashRoutines: [], cashDepartmentId: null }, revision, viewer };
@@ -286,7 +288,7 @@ async function writeState(request, db, viewer, taskId) {
         for (const unit of current.data.units) units.set(unit.id, unit);
         next = normalize({ ...next, units: [...units.values()] });
       }
-      const emails = next.people.map(person => person.email.trim().toLowerCase());
+      const emails = next.people.map(person => person.email.trim().toLowerCase()).filter(Boolean);
       if (emails.some(email => !email.includes("@")) || new Set(emails).size !== emails.length) throw new Error();
     } catch {
       throw new HttpError(400, "Cadastros ou tarefas inválidos. Confira as unidades, os e-mails e os vínculos.");

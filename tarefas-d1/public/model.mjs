@@ -54,7 +54,10 @@ export function normalize(raw) {
   checkRows(raw.departments, d => typeof d.name === "string" && typeof d.description === "string");
   const departments = new Set(raw.departments.map(d => d.id));
   checkRows(raw.people, p => typeof p.name === "string" && typeof p.email === "string" &&
-    departments.has(p.departmentId) && ["Funcionário", "Gestor"].includes(p.role));
+    (p.departmentId == null || departments.has(p.departmentId)) && ["Funcionário", "Gestor"].includes(p.role) &&
+    (p.unitId == null || unitById.has(p.unitId)) &&
+    (p.jobTitle === undefined || typeof p.jobTitle === "string" && p.jobTitle.length <= 100) &&
+    (p.employmentStatus === undefined || ["Ativo", "Férias", "Afastado", "Desligado"].includes(p.employmentStatus)));
   const people = new Set(raw.people.map(p => p.id));
   checkRows(raw.tasks, t => typeof t.title === "string" && typeof t.description === "string" &&
     departments.has(t.departmentId) && (t.personId == null || people.has(t.personId)) &&
