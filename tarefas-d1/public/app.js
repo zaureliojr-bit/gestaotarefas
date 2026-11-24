@@ -615,14 +615,21 @@ $("departmentCards").onclick = event => {
 };
 
 function renderPeople() {
-  $("peopleTable").innerHTML = data.people.map(p =>
-    `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.email)}</td><td>${esc(deptName(p.departmentId))}</td>
+  const unit = $("filterUnit").value;
+  const status = $("filterPeopleStatus").value;
+  const query = $("searchPeople").value.trim().toLocaleLowerCase("pt-BR");
+  const people = data.people.filter(p => (!unit || (unit === "none" ? !p.unitId : p.unitId === unit)) &&
+    (!status || (p.employmentStatus ?? "Ativo") === status) && `${p.name} ${p.jobTitle ?? ""}`.toLocaleLowerCase("pt-BR").includes(query));
+  $("peopleTable").innerHTML = people.map(p =>
+    `<tr><td><b>${esc(p.name)}</b></td><td>${esc(unitName(p.unitId))}</td><td>${esc(p.jobTitle || "–")}</td><td>${esc(p.employmentStatus ?? "Ativo")}</td><td>${esc(p.email || "–")}</td><td>${esc(deptName(p.departmentId))}</td>
       <td>${esc(p.role)}</td><td><div class="person-actions">
         <button class="small-btn" data-edit-person="${p.id}" aria-label="Editar funcionário ${esc(p.name)}">Editar</button>
         <button class="small-btn" data-delete-person="${p.id}">Excluir</button>
       </div></td></tr>`
-  ).join("") || '<tr><td colspan="5" class="empty">Nenhum funcionário cadastrado.</td></tr>';
+  ).join("") || '<tr><td colspan="8" class="empty">Nenhum funcionário encontrado.</td></tr>';
 }
+$("searchPeople").oninput = renderPeople;
+$("filterPeopleStatus").onchange = renderPeople;
 
 let accessUsers = [];
 let editingAccess;
@@ -782,7 +789,7 @@ function populateSelects() {
 
   const departments = data.departments.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
   options("taskDepartment", departments);
-  options("personDepartment", departments);
+  options("personDepartment", '<option value="">Sem departamento</option>' + departments);
   options("filterDepartment", '<option value="">Todos os departamentos</option>' + departments);
   options("taskPerson", '<option value="">Não atribuído</option>' + data.people.map(p =>
     `<option value="${p.id}">${esc(p.name)} · ${esc(deptName(p.departmentId))}</option>`
@@ -791,6 +798,7 @@ function populateSelects() {
   options("filterUnit", '<option value="">Todas as unidades</option>' + units +
     (isAdmin() ? '<option value="none">Sem unidade</option>' : ""));
   options("taskUnit", '<option value="">Sem unidade</option>' + units);
+  options("personUnit", '<option value="">Selecione uma unidade</option>' + units);
   options("accessUnit", '<option value="">Selecione uma unidade</option>' + units);
 }
 
@@ -947,39 +955,113 @@ $("deleteDepartmentForm").addEventListener("submit", async event => {
 });
 
 function openPerson(person) {
-  if (!data.departments.length) {
-    notify("Cadastre um departamento primeiro.");
-    return;
-  }
   $("personDialogTitle").textContent = person ? "Editar funcionário" : "Novo funcionário";
   $("personId").value = person?.id ?? "";
   $("personName").value = person?.name ?? "";
   $("personEmail").value = person?.email ?? "";
-  $("personDepartment").value = person?.departmentId ?? data.departments[0].id;
+  $("personDepartment").value = person?.departmentId ?? "";
+  $("personUnit").value = person ? person.unitId ?? "" : $("filterUnit").value === "none" ? "" : $("filterUnit").value;
+  $("personJob").value = person?.jobTitle ?? "";
+  $("personEmploymentStatus").value = person?.employmentStatus ?? "Ativo";
   $("personRole").value = person?.role ?? "Funcionário";
   showMessage("personError", "");
   $("personDialog").showModal();
 }
 
 $("addPerson").onclick = () => openPerson();
+let importPeopleRows = [];
+$("importPeople").onclick = () => {
+  $("importPeopleForm").reset();
+  importPeopleRows = [];
+  $("importPeopleMapping").replaceChildren();
+  $("importPeopleSummary").textContent = "";
+  $("confirmPeopleImport").disabled = true;
+  showMessage("importPeopleError", "");
+  $("importPeopleDialog").showModal();
+};
+$("importPeopleFile").onchange = async () => {
+  importPeopleRows = [];
+  const mapping = $("importPeopleMapping");
+  mapping.replaceChildren();
+  $("confirmPeopleImport").disabled = true;
+  $("importPeopleSummary").textContent = "";
+  showMessage("importPeopleError", "");
+  try {
+    const file = $("importPeopleFile").files[0];
+    if (!file || file.size > 500000) throw new Error("Selecione um arquivo de até 500 KB.");
+    const rows = JSON.parse(await file.text());
+    if (!Array.isArray(rows) || !rows.length || rows.length > 1000 || rows.some(p =>
+      !p || typeof p.name !== "string" || !p.name.trim() || p.name.length > 100 ||
+      typeof p.unit !== "string" || !p.unit.trim() || p.unit.length > 100 ||
+      typeof p.jobTitle !== "string" || p.jobTitle.length > 100 ||
+      typeof p.email !== "string" || p.email.length > 150 || (p.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)))) {
+      throw new Error("Arquivo inválido. Confira os campos nome, unidade, cargo e e-mail.");
+    }
+    importPeopleRows = rows;
+    for (const unit of new Set(rows.map(p => p.unit))) {
+      const count = rows.filter(p => p.unit === unit).length;
+      const label = document.createElement("label");
+      label.textContent = `${unit} (${count} funcionários)`;
+      const select = document.createElement("select");
+      select.required = true;
+      select.dataset.sourceUnit = unit;
+      select.add(new Option("Selecione a unidade de destino", ""));
+      for (const target of data.units) select.add(new Option(target.name, target.id));
+      const target = data.units.find(target => unitNameKey(target.name) === unitNameKey(unit));
+      if (target) select.value = target.id;
+      label.append(select);
+      mapping.append(label);
+    }
+    $("importPeopleSummary").textContent = `${rows.length} registros para revisar. Registros já cadastrados na mesma unidade serão ignorados.`;
+    $("confirmPeopleImport").disabled = false;
+  } catch (error) {
+    showMessage("importPeopleError", error.message);
+  }
+};
+$("importPeopleForm").onsubmit = async event => {
+  event.preventDefault();
+  if (!importPeopleRows.length) return;
+  const mapping = new Map([...$("importPeopleMapping").querySelectorAll("select")].map(s => [s.dataset.sourceUnit, s.value]));
+  if ([...mapping.values()].some(id => !data.units.some(unit => unit.id === id))) return showMessage("importPeopleError", "Selecione todas as unidades de destino.");
+  if (new Set(mapping.values()).size !== mapping.size) return showMessage("importPeopleError", "Vincule cada loja de origem a uma unidade diferente.");
+  const next = structuredClone(data);
+  let imported = 0;
+  let skipped = 0;
+  for (const row of importPeopleRows) {
+    const unitId = mapping.get(row.unit);
+    const name = row.name.trim();
+    const email = row.email.trim().toLowerCase();
+    if (next.people.some(p => p.unitId === unitId && unitNameKey(p.name) === unitNameKey(name))) { skipped++; continue; }
+    if (email && next.people.some(p => p.email.trim().toLowerCase() === email)) return showMessage("importPeopleError", "Há um e-mail já cadastrado em outro registro. Revise os cadastros antes de importar.");
+    next.people.push({ id: nextId(next.people), name, email, unitId, jobTitle: row.jobTitle.trim(), departmentId: null, role: "Funcionário", employmentStatus: "Ativo" });
+    imported++;
+  }
+  if (await saveData(next, "importPeopleError")) {
+    $("importPeopleDialog").close();
+    notify(`${imported} funcionários importados e ${skipped} ignorados.`);
+  }
+};
 $("personForm").addEventListener("submit", async event => {
   event.preventDefault();
   const id = Number($("personId").value);
   const email = $("personEmail").value.trim().toLowerCase();
   const name = $("personName").value.trim();
-  const departmentId = Number($("personDepartment").value);
+  const departmentId = Number($("personDepartment").value) || null;
   const role = $("personRole").value;
-  if (!name || !departmentId) {
-    showMessage("personError", "Preencha o nome e o departamento.");
+  const unitId = $("personUnit").value;
+  const jobTitle = $("personJob").value.trim();
+  const employmentStatus = $("personEmploymentStatus").value;
+  if (!name || !unitId) {
+    showMessage("personError", "Preencha o nome e selecione a unidade.");
     return;
   }
-  if (data.people.some(p => p.id !== id && p.email.trim().toLowerCase() === email)) {
+  if (email && data.people.some(p => p.id !== id && p.email.trim().toLowerCase() === email)) {
     showMessage("personError", "Este e-mail já está cadastrado.");
     return;
   }
   if (await commit(next => {
     const person = next.people.find(p => p.id === id);
-    const fields = { name, email, departmentId, role };
+    const fields = { name, email, departmentId, role, unitId, jobTitle, employmentStatus };
     if (person) Object.assign(person, fields);
     else next.people.push({ id: nextId(next.people), ...fields });
   }, id ? "Funcionário atualizado." : "Funcionário cadastrado.", "personError")) {

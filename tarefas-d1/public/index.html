@@ -116,8 +116,9 @@
         </section>
 
         <section class="page" id="page-people" data-admin>
-          <div class="page-heading"><div><h1>Funcionários</h1><p>Cadastre e organize os integrantes da equipe.</p></div><button class="btn btn-primary" id="addPerson">＋ Novo funcionário</button></div>
-          <article class="card table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Departamento</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="peopleTable"></tbody></table></article>
+          <div class="page-heading"><div><h1>Funcionários</h1><p>Cadastre e organize os colaboradores por unidade.</p></div><div class="person-actions"><button class="btn btn-light" id="importPeople">Importar funcionários</button><button class="btn btn-primary" id="addPerson">＋ Novo funcionário</button></div></div>
+          <div class="filters"><input id="searchPeople" type="search" placeholder="Buscar por nome ou cargo" aria-label="Buscar funcionários"><select id="filterPeopleStatus" aria-label="Situação"><option value="">Todas as situações</option><option>Ativo</option><option>Férias</option><option>Afastado</option><option>Desligado</option></select></div>
+          <article class="card table-wrap"><table><thead><tr><th>Nome</th><th>Unidade</th><th>Cargo</th><th>Situação</th><th>E-mail</th><th>Departamento</th><th>Perfil</th><th>Ações</th></tr></thead><tbody id="peopleTable"></tbody></table></article>
         </section>
 
         <section class="page" id="page-access" data-admin>
@@ -248,13 +249,25 @@
       <div class="dialog-heading"><h2 id="personDialogTitle">Novo funcionário</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="personDialog">×</button></div>
       <input type="hidden" id="personId">
       <label>Nome completo<input id="personName" required maxlength="100"></label>
-      <label>E-mail<input id="personEmail" type="email" required maxlength="150"></label>
+      <label>E-mail (opcional)<input id="personEmail" type="email" maxlength="150"></label>
+      <label>Unidade<select id="personUnit" required></select></label>
+      <div class="form-grid"><label>Cargo<input id="personJob" maxlength="100" placeholder="Ex.: Atendente"></label><label>Situação<select id="personEmploymentStatus"><option>Ativo</option><option>Férias</option><option>Afastado</option><option>Desligado</option></select></label></div>
       <div class="form-grid">
-        <label>Departamento<select id="personDepartment" required></select></label>
+        <label>Departamento<select id="personDepartment"></select></label>
         <label>Perfil<select id="personRole"><option>Funcionário</option><option>Gestor</option></select></label>
       </div>
       <p id="personError" class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="personDialog">Cancelar</button><button class="btn btn-primary" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+  <dialog id="importPeopleDialog" class="dialog" aria-labelledby="importPeopleTitle">
+    <form id="importPeopleForm">
+      <div class="dialog-heading"><h2 id="importPeopleTitle">Importar funcionários</h2><button type="button" class="close-btn" aria-label="Fechar" data-close="importPeopleDialog">×</button></div>
+      <label>Arquivo de cadastro preparado (.json)<input id="importPeopleFile" type="file" accept=".json,application/json" required></label>
+      <div id="importPeopleMapping"></div>
+      <p id="importPeopleSummary"></p>
+      <p id="importPeopleError" class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="btn btn-light" data-close="importPeopleDialog">Cancelar</button><button id="confirmPeopleImport" class="btn btn-primary" type="submit" disabled>Importar</button></div>
     </form>
   </dialog>
   <div id="toast" class="toast" role="status"></div>
