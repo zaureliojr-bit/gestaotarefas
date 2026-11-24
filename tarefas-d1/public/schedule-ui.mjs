@@ -1,4 +1,4 @@
-import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth } from "./schedule.mjs";
+import { monthDays, weekday, dailyMinutes, hoursLabel, shiftEnd, defaultShift, generatePlan, analyzePlan, validMonth, normalizeShiftTime } from "./schedule.mjs";
 import { localDay } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
@@ -90,7 +90,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleHeading").textContent = `${getData().units.find(u => u.id === plan.unitId)?.name ?? plan.unitId} · ${plan.month.slice(5)}/${plan.month.slice(0, 4)}`;
     $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s)} · intervalo ${s.breakMinutes} min`).join(" | ");
     $("scheduleHours").textContent = `${hoursLabel(dailyMinutes())} de trabalho por dia · ${hoursLabel(dailyMinutes() * 5)} por semana · pausa adicionada ao horário de saída.`;
-    $("scheduleShifts").innerHTML = plan.shifts.map(s => `<div class="schedule-shift" data-shift="${s.id}"><label>Nome<input data-field="name" value="${esc(s.name)}" maxlength="60"></label><label>Entrada<input type="time" data-field="start" value="${esc(s.start)}"></label><label>Intervalo (min)<input type="number" data-field="breakMinutes" min="30" max="120" value="${s.breakMinutes}"></label><label>Mínimo<input type="number" data-field="minimum" min="0" max="100" value="${s.minimum}"></label><button class="small-btn" type="button" data-delete-shift="${s.id}"${plan.shifts.length === 1 || plan.rows.some(r => r.shiftId === s.id) ? " disabled" : ""}>Excluir</button><small>Saída ${shiftEnd(s)}</small></div>`).join("");
+    $("scheduleShifts").innerHTML = plan.shifts.map(s => `<div class="schedule-shift" data-shift="${s.id}"><label>Nome<input data-field="name" value="${esc(s.name)}" maxlength="60"></label><label>Entrada (24h)<input class="schedule-time-input" type="text" inputmode="numeric" autocomplete="off" data-field="start" maxlength="5" placeholder="HH:MM" value="${esc(s.start)}"></label><label>Saída <output class="schedule-time-output">${shiftEnd(s)}${shiftEnd(s) < s.start ? '<span>Dia seguinte</span>' : ''}</output></label><label>Intervalo (min)<input type="number" data-field="breakMinutes" min="30" max="120" value="${s.breakMinutes}"></label><label>Mínimo<input type="number" data-field="minimum" min="0" max="100" value="${s.minimum}"></label><button class="small-btn" type="button" data-delete-shift="${s.id}"${plan.shifts.length === 1 || plan.rows.some(r => r.shiftId === s.id) ? " disabled" : ""}>Excluir</button></div>`).join("");
     $("scheduleCoverageRules").innerHTML = plan.shifts.map(shift => {
       const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
       const count = plan.rows.filter(r => r.shiftId === shift.id).length;
@@ -126,6 +126,11 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const input = e.target;
     if (!input.dataset.field) return;
     const shift = plan.shifts.find(s => s.id === Number(input.closest("[data-shift]").dataset.shift));
+    if (input.dataset.field === "start") {
+      const value = normalizeShiftTime(input.value);
+      if (!value) { input.value = shift.start; return error("Digite um horário válido no formato HH:MM (00:00 a 23:59)."); }
+      shift.start = value; error(""); markDirty(); render(); return;
+    }
     if (!input.checkValidity() || !input.value.trim()) return render();
     shift[input.dataset.field] = input.type === "number" ? Number(input.value) : input.value.trim(); markDirty(); render();
   };
