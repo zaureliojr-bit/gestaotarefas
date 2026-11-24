@@ -469,7 +469,7 @@ function renderTasks() {
   const day = localDay();
   const filtered = tasksByUnit().filter(t =>
     (t.title + " " + personName(t.personId)).toLowerCase().includes(query) &&
-    (!status || t.status === status) && (!dept || String(t.departmentId) === dept) &&
+    (status ? t.status === status : t.status !== "Concluída") && (!dept || String(t.departmentId) === dept) &&
     matchesDue(t, due, day)
   ).sort((a, b) =>
     Number(a.status === "Concluída") - Number(b.status === "Concluída") ||
