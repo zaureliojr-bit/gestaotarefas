@@ -14,11 +14,11 @@ export function monthDays(month) {
   for (let day = start; day.startsWith(month); day = offsetDay(day, 1)) days.push(day);
   return days;
 }
-export const dailyMinutes = day => day >= "2027-12-16" ? 480 : 504;
+export const dailyMinutes = () => 444;
 export const hoursLabel = minutes => `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
-export const shiftEnd = (shift, day) => {
+export const shiftEnd = shift => {
   const [hours, minutes] = shift.start.split(":").map(Number);
-  const end = (hours * 60 + minutes + shift.breakMinutes + dailyMinutes(day)) % 1440;
+  const end = (hours * 60 + minutes + shift.breakMinutes + dailyMinutes()) % 1440;
   return `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
 };
 export const defaultShift = () => ({ id: 1, name: "Turno 1", start: "08:00", breakMinutes: 60, minimum: 1 });
