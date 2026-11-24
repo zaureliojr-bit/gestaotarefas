@@ -330,7 +330,7 @@ async function schedules(request, db, viewer) {
   if (!current.data.units.some(unit => unit.id === unitId && unit.store) ||
       (!networkAccess(viewer.role) && viewer.unitId !== unitId)) throw new HttpError(403, "Unidade indisponível.");
   const people = current.data.people.filter(p => p.unitId === unitId).map(p => ({
-    id: p.id, name: p.name, jobTitle: p.jobTitle ?? "", employmentStatus: p.employmentStatus ?? "Ativo"
+    id: p.id, name: p.name, jobTitle: p.jobTitle ?? "", employmentStatus: p.employmentStatus ?? "Ativo", preferredShiftId: p.preferredShiftId ?? null
   }));
   const unitPlans = current.data.schedules.filter(p => p.unitId === unitId);
   if (request.method === "GET") return json({ revision: current.revision, people, plans: unitPlans });

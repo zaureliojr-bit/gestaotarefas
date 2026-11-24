@@ -50,8 +50,15 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     const template = context.plans.filter(p => p.month < month).sort((a, b) => b.month.localeCompare(a.month))[0];
     const shifts = structuredClone(template?.shifts ?? [defaultShift()]);
     const days = monthDays(month);
-    const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => ({ personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: template?.rows.find(r => r.personId === p.id)?.shiftId ?? shifts[0].id, days: days.map(() => "T") }));
+    const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => ({ personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, template?.rows.find(r => r.personId === p.id)?.shiftId), days: days.map(() => "T") }));
     return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), status: "draft" };
+  }
+  function preferredShift(person, shifts, fallback) {
+    const id = person.preferredShiftId;
+    if (!id) return fallback ?? shifts[0].id;
+    if (!shifts.some(s => s.id === id)) shifts.push({ ...defaultShift(), id, name: `Turno ${id}` });
+    shifts.sort((a, b) => a.id - b.id);
+    return id;
   }
   async function load() {
     const unit = $("scheduleUnit").value;
@@ -149,12 +156,20 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleAddHoliday").onclick = () => { const day = $("scheduleHoliday").value; if (!monthDays(plan.month).includes(day) || plan.holidays.includes(day)) return; plan.holidays.push(day); plan.holidays.sort(); markDirty(); render(); };
   $("scheduleHolidays").onclick = e => { const day = e.target.dataset.removeHoliday; if (!day) return; plan.holidays = plan.holidays.filter(d => d !== day); markDirty(); render(); };
   $("scheduleGenerate").onclick = () => { plan = generatePlan(plan, context.plans); markDirty(); render(); };
-  $("scheduleRoster").onclick = () => {
-    if (!window.confirm("Atualizar a lista com os funcionários ativos da filial? Os dias dos funcionários mantidos serão preservados.")) return;
+  $("scheduleRoster").onclick = async () => {
+    if (!window.confirm("Atualizar funcionários ativos e aplicar os turnos padrão do cadastro? Os dias dos funcionários mantidos serão preservados.")) return;
+    try {
+      const version = requestVersion;
+      const fresh = await api(endpoint());
+      if (version !== requestVersion) return;
+      if (JSON.stringify(fresh.plans) !== JSON.stringify(context.plans)) return error("As escalas foram alteradas em outra sessão. Recarregue antes de atualizar a equipe.");
+      context = fresh;
+    } catch (e) { return error(e.message); }
     const existing = new Map(plan.rows.map(r => [r.personId, r]));
     plan.rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
       const row = existing.get(p.id);
-      return row ? { ...row, name: p.name, jobTitle: p.jobTitle } : { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: plan.shifts[0].id, days: monthDays(plan.month).map(() => "F") };
+      const shiftId = preferredShift(p, plan.shifts, row?.shiftId);
+      return row ? { ...row, name: p.name, jobTitle: p.jobTitle, shiftId } : { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId, days: monthDays(plan.month).map(() => "F") };
     });
     markDirty(); render();
   };
