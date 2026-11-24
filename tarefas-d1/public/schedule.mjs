@@ -15,6 +15,15 @@ export function monthDays(month) {
   return days;
 }
 export const dailyMinutes = () => 444;
+export function normalizeShiftTime(value) {
+  const input = String(value).trim();
+  const match = /^(\d{1,2}):?(\d{2})$/.exec(input);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
 export const hoursLabel = minutes => `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
 export const shiftEnd = shift => {
   const [hours, minutes] = shift.start.split(":").map(Number);
