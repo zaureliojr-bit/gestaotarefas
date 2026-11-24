@@ -95,6 +95,8 @@
 .schedule-coverage-group{padding:12px 0;border-top:1px solid var(--line)}
 .schedule-coverage-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
 .schedule-coverage-heading small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+.schedule-coverage-toggle{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;background:transparent;border:0;color:var(--ink);padding:5px 0;font:inherit;cursor:pointer}
+.schedule-coverage-toggle>span{font-size:15px;color:var(--muted)}
 .schedule-rule-people{grid-column:1/-1;display:grid;gap:7px;padding:9px 10px;background:var(--bg);border-radius:8px;font-size:11px}
 .schedule-rule-people small{color:var(--muted);font-size:11px}
 .schedule-assigned-list{display:flex;flex-wrap:wrap;gap:5px}
