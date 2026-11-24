@@ -20,6 +20,16 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   const markDirty = () => { dirty = true; plan.status = "draft"; status(); };
   const shiftOptions = selected => plan.shifts.map(s => option(s.id, s.name, s.id === selected)).join("");
   const jobs = () => [...new Set([...context.people.map(p => p.jobTitle), ...plan.rows.map(p => p.jobTitle)].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const jobKey = value => value.trim().toLocaleLowerCase("pt-BR");
+  const assignedCount = (shiftId, job) => plan.rows.filter(r => r.shiftId === shiftId && jobKey(r.jobTitle) === jobKey(job)).length;
+  function availableJobs(shiftId, currentIndex = -1) {
+    const current = plan.coverage[currentIndex]?.jobTitle;
+    const used = new Set(plan.coverage.filter((r, i) => r.shiftId === shiftId && i !== currentIndex).map(r => jobKey(r.jobTitle)));
+    const unique = new Map(jobs().map(j => [jobKey(j), j]));
+    if (current) unique.set(jobKey(current), current);
+    return [...unique.values()].filter(j => j === current || !used.has(jobKey(j)))
+      .sort((a, b) => assignedCount(shiftId, b) - assignedCount(shiftId, a) || a.localeCompare(b, "pt-BR"));
+  }
   const endpoint = () => `schedules?unit=${encodeURIComponent($("scheduleUnit").value)}`;
   const allowed = () => ["office", "network_manager", "manager"].includes(getViewer()?.role);
   function setupUnitOptions() {
@@ -67,8 +77,11 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s, days[0])}${mixed ? ` (após 15/12: ${shiftEnd(s, days.at(-1))})` : ""} · intervalo ${s.breakMinutes} min`).join(" | ");
     $("scheduleHours").textContent = mixed ? "Transição: 8h24 até 15/12 e 8h a partir de 16/12. Confira a semana de mudança." : `${hoursLabel(dailyMinutes(days[0]))} de trabalho por dia · ${hoursLabel(dailyMinutes(days[0]) * 5)} por semana · pausa adicionada ao horário de saída.`;
     $("scheduleShifts").innerHTML = plan.shifts.map(s => `<div class="schedule-shift" data-shift="${s.id}"><label>Nome<input data-field="name" value="${esc(s.name)}" maxlength="60"></label><label>Entrada<input type="time" data-field="start" value="${esc(s.start)}"></label><label>Intervalo (min)<input type="number" data-field="breakMinutes" min="30" max="120" value="${s.breakMinutes}"></label><label>Mínimo<input type="number" data-field="minimum" min="0" max="100" value="${s.minimum}"></label><button class="small-btn" type="button" data-delete-shift="${s.id}"${plan.shifts.length === 1 || plan.rows.some(r => r.shiftId === s.id) ? " disabled" : ""}>Excluir</button><small>Saída ${shiftEnd(s, days[0])}${mixed ? ` / ${shiftEnd(s, days.at(-1))}` : ""}</small></div>`).join("");
-    $("scheduleCoverageRules").innerHTML = plan.coverage.map((c, i) => `<div class="schedule-rule" data-rule="${i}"><label>Turno<select data-rule-field="shiftId">${shiftOptions(c.shiftId)}</select></label><label>Cargo<select data-rule-field="jobTitle">${jobs().map(j => option(j, j, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${i}">Excluir</button></div>`).join("") || '<p class="task-meta">Adicione exigências por cargo quando necessário.</p>';
-    $("scheduleAddCoverage").disabled = !jobs().length;
+    $("scheduleCoverageRules").innerHTML = plan.shifts.map(shift => {
+      const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
+      const count = plan.rows.filter(r => r.shiftId === shift.id).length;
+      return `<section class="schedule-coverage-group"><div class="schedule-coverage-heading"><div><strong>${esc(shift.name)}</strong><small>${count} funcionário(s) no turno</small></div><button class="btn btn-light" type="button" data-add-coverage="${shift.id}"${!availableJobs(shift.id).length || plan.coverage.length >= 40 ? " disabled" : ""}>＋ Cargo</button></div>${rules.map(c => `<div class="schedule-rule" data-rule="${c.index}"><label>Cargo<select data-rule-field="jobTitle">${availableJobs(shift.id, c.index).map(j => option(j, `${j} (${assignedCount(shift.id, j)})`, c.jobTitle === j)).join("")}</select></label><label>Mínimo<input type="number" data-rule-field="minimum" min="1" max="100" value="${c.minimum}"></label><button type="button" class="small-btn" data-delete-rule="${c.index}">Excluir</button></div>`).join("") || '<p class="task-meta">Nenhuma exigência por cargo.</p>'}</section>`;
+    }).join("");
     $("scheduleHoliday").min = days[0]; $("scheduleHoliday").max = days.at(-1);
     $("scheduleHolidays").innerHTML = plan.holidays.map(d => `<button type="button" class="small-btn" data-remove-holiday="${d}">${d.slice(-2)} ×</button>`).join(" ");
     const report = analyzePlan(plan, context.plans);
@@ -102,9 +115,17 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
     shift[input.dataset.field] = input.type === "number" ? Number(input.value) : input.value.trim(); markDirty(); render();
   };
   $("scheduleShifts").onclick = e => { const id = Number(e.target.dataset.deleteShift); if (!id || plan.rows.some(r => r.shiftId === id) || plan.shifts.length === 1) return; plan.shifts = plan.shifts.filter(s => s.id !== id); plan.coverage = plan.coverage.filter(c => c.shiftId !== id); markDirty(); render(); };
-  $("scheduleAddCoverage").onclick = () => { if (!jobs().length || plan.coverage.length >= 40) return; plan.coverage.push({ shiftId: plan.shifts[0].id, jobTitle: jobs()[0], minimum: 1 }); markDirty(); render(); };
   $("scheduleCoverageRules").onchange = e => { const input = e.target; if (!input.dataset.ruleField || !input.checkValidity()) return render(); const rule = plan.coverage[Number(input.closest("[data-rule]").dataset.rule)]; rule[input.dataset.ruleField] = input.dataset.ruleField === "jobTitle" ? input.value : Number(input.value); markDirty(); render(); };
-  $("scheduleCoverageRules").onclick = e => { if (e.target.dataset.deleteRule === undefined) return; plan.coverage.splice(Number(e.target.dataset.deleteRule), 1); markDirty(); render(); };
+  $("scheduleCoverageRules").onclick = e => {
+    const shiftId = Number(e.target.dataset.addCoverage);
+    if (shiftId) {
+      const job = availableJobs(shiftId)[0];
+      if (!job || plan.coverage.length >= 40) return;
+      plan.coverage.push({ shiftId, jobTitle: job, minimum: 1 });
+    } else if (e.target.dataset.deleteRule !== undefined) plan.coverage.splice(Number(e.target.dataset.deleteRule), 1);
+    else return;
+    markDirty(); render();
+  };
   $("scheduleTable").onchange = e => { const input = e.target; if (input.dataset.personShift) plan.rows.find(r => r.personId === Number(input.dataset.personShift)).shiftId = Number(input.value); else if (input.dataset.person) plan.rows.find(r => r.personId === Number(input.dataset.person)).days[Number(input.dataset.day)] = input.value; else return; markDirty(); render(); };
   $("scheduleAddHoliday").onclick = () => { const day = $("scheduleHoliday").value; if (!monthDays(plan.month).includes(day) || plan.holidays.includes(day)) return; plan.holidays.push(day); plan.holidays.sort(); markDirty(); render(); };
   $("scheduleHolidays").onclick = e => { const day = e.target.dataset.removeHoliday; if (!day) return; plan.holidays = plan.holidays.filter(d => d !== day); markDirty(); render(); };
