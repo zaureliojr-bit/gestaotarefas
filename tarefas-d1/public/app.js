@@ -1,4 +1,4 @@
-import { STATUSES, CHECKLIST, localDay, normalize, nextId, unitNameKey } from "./model.mjs";
+import { STATUSES, CHECKLIST, localDay, normalize, nextId, unitNameKey, importEmployees } from "./model.mjs";
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -1012,7 +1012,7 @@ $("importPeopleFile").onchange = async () => {
       label.append(select);
       mapping.append(label);
     }
-    $("importPeopleSummary").textContent = `${rows.length} registros para revisar. Registros já cadastrados na mesma unidade serão ignorados.`;
+    $("importPeopleSummary").textContent = `${rows.length} registros para revisar. Cadastros existentes serão aproveitados. A importação não cria acessos ao painel.`;
     $("confirmPeopleImport").disabled = false;
   } catch (error) {
     showMessage("importPeopleError", error.message);
@@ -1025,20 +1025,16 @@ $("importPeopleForm").onsubmit = async event => {
   if ([...mapping.values()].some(id => !data.units.some(unit => unit.id === id))) return showMessage("importPeopleError", "Selecione todas as unidades de destino.");
   if (new Set(mapping.values()).size !== mapping.size) return showMessage("importPeopleError", "Vincule cada loja de origem a uma unidade diferente.");
   const next = structuredClone(data);
-  let imported = 0;
-  let skipped = 0;
-  for (const row of importPeopleRows) {
-    const unitId = mapping.get(row.unit);
-    const name = row.name.trim();
-    const email = row.email.trim().toLowerCase();
-    if (next.people.some(p => p.unitId === unitId && unitNameKey(p.name) === unitNameKey(name))) { skipped++; continue; }
-    if (email && next.people.some(p => p.email.trim().toLowerCase() === email)) return showMessage("importPeopleError", "Há um e-mail já cadastrado em outro registro. Revise os cadastros antes de importar.");
-    next.people.push({ id: nextId(next.people), name, email, unitId, jobTitle: row.jobTitle.trim(), departmentId: null, role: "Funcionário", employmentStatus: "Ativo" });
-    imported++;
-  }
+  const { imported, updated, skipped, conflicts } = importEmployees(next, importPeopleRows, mapping);
   if (await saveData(next, "importPeopleError")) {
-    $("importPeopleDialog").close();
-    notify(`${imported} funcionários importados e ${skipped} ignorados.`);
+    const summary = `${imported} novos, ${updated} atualizados e ${skipped} já cadastrados.`;
+    if (conflicts.length) {
+      $("importPeopleSummary").textContent = summary;
+      showMessage("importPeopleError", `Revise os vínculos de unidade de: ${conflicts.join(", ")}. Os demais registros foram salvos.`);
+    } else {
+      $("importPeopleDialog").close();
+      notify(summary);
+    }
   }
 };
 $("personForm").addEventListener("submit", async event => {
