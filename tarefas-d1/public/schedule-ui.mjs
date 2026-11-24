@@ -72,11 +72,10 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   function render() {
     if (!plan) return;
     const days = monthDays(plan.month);
-    const mixed = dailyMinutes(days[0]) !== dailyMinutes(days.at(-1));
     $("scheduleHeading").textContent = `${getData().units.find(u => u.id === plan.unitId)?.name ?? plan.unitId} · ${plan.month.slice(5)}/${plan.month.slice(0, 4)}`;
-    $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s, days[0])}${mixed ? ` (após 15/12: ${shiftEnd(s, days.at(-1))})` : ""} · intervalo ${s.breakMinutes} min`).join(" | ");
-    $("scheduleHours").textContent = mixed ? "Transição: 8h24 até 15/12 e 8h a partir de 16/12. Confira a semana de mudança." : `${hoursLabel(dailyMinutes(days[0]))} de trabalho por dia · ${hoursLabel(dailyMinutes(days[0]) * 5)} por semana · pausa adicionada ao horário de saída.`;
-    $("scheduleShifts").innerHTML = plan.shifts.map(s => `<div class="schedule-shift" data-shift="${s.id}"><label>Nome<input data-field="name" value="${esc(s.name)}" maxlength="60"></label><label>Entrada<input type="time" data-field="start" value="${esc(s.start)}"></label><label>Intervalo (min)<input type="number" data-field="breakMinutes" min="30" max="120" value="${s.breakMinutes}"></label><label>Mínimo<input type="number" data-field="minimum" min="0" max="100" value="${s.minimum}"></label><button class="small-btn" type="button" data-delete-shift="${s.id}"${plan.shifts.length === 1 || plan.rows.some(r => r.shiftId === s.id) ? " disabled" : ""}>Excluir</button><small>Saída ${shiftEnd(s, days[0])}${mixed ? ` / ${shiftEnd(s, days.at(-1))}` : ""}</small></div>`).join("");
+    $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s)} · intervalo ${s.breakMinutes} min`).join(" | ");
+    $("scheduleHours").textContent = `${hoursLabel(dailyMinutes())} de trabalho por dia · ${hoursLabel(dailyMinutes() * 5)} por semana · pausa adicionada ao horário de saída.`;
+    $("scheduleShifts").innerHTML = plan.shifts.map(s => `<div class="schedule-shift" data-shift="${s.id}"><label>Nome<input data-field="name" value="${esc(s.name)}" maxlength="60"></label><label>Entrada<input type="time" data-field="start" value="${esc(s.start)}"></label><label>Intervalo (min)<input type="number" data-field="breakMinutes" min="30" max="120" value="${s.breakMinutes}"></label><label>Mínimo<input type="number" data-field="minimum" min="0" max="100" value="${s.minimum}"></label><button class="small-btn" type="button" data-delete-shift="${s.id}"${plan.shifts.length === 1 || plan.rows.some(r => r.shiftId === s.id) ? " disabled" : ""}>Excluir</button><small>Saída ${shiftEnd(s)}</small></div>`).join("");
     $("scheduleCoverageRules").innerHTML = plan.shifts.map(shift => {
       const rules = plan.coverage.map((c, i) => ({ ...c, index: i })).filter(c => c.shiftId === shift.id);
       const count = plan.rows.filter(r => r.shiftId === shift.id).length;
@@ -159,8 +158,7 @@ export function setupSchedules({ api, notify, getData, getViewer, sync }) {
   $("scheduleExport").onclick = () => {
     const quote = value => { const s = String(value); return `"${(/^[=+\-@\t\r]/.test(s) ? "'" + s : s).replaceAll('"', '""')}"`; };
     const days = monthDays(plan.month);
-    const mixed = dailyMinutes(days[0]) !== dailyMinutes(days.at(-1));
-    const rows = [["Funcionário", "Cargo", "Turno", "Entrada", "Intervalo (min)", "Saída", ...(mixed ? ["Saída a partir de 16/12"] : []), ...days], ...plan.rows.map(r => { const shift = plan.shifts.find(s => s.id === r.shiftId); return [r.name, r.jobTitle, shift.name, shift.start, shift.breakMinutes, shiftEnd(shift, days[0]), ...(mixed ? [shiftEnd(shift, days.at(-1))] : []), ...r.days.map(s => stateNames[s])]; })];
+    const rows = [["Funcionário", "Cargo", "Turno", "Entrada", "Intervalo (min)", "Saída", ...days], ...plan.rows.map(r => { const shift = plan.shifts.find(s => s.id === r.shiftId); return [r.name, r.jobTitle, shift.name, shift.start, shift.breakMinutes, shiftEnd(shift), ...r.days.map(s => stateNames[s])]; })];
     const url = URL.createObjectURL(new Blob(["\ufeff", rows.map(r => r.map(quote).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a"); a.href = url; a.download = `escala-${plan.unitId}-${plan.month}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
