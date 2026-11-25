@@ -28,3 +28,11 @@ test("remote errors never fall back to D1", async () => {
   const db = selectDatabase({ DATABASE_BACKEND: "turso", TURSO_DATABASE_URL: "libsql://example.turso.io", TURSO_AUTH_TOKEN: "fake" }, async () => new Response("", { status: 503 }));
   await assert.rejects(db.prepare("SELECT 1").first(), /503/);
 });
+
+test("Workers-compatible redirect mode rejects redirects without forwarding token", async () => {
+  const db = selectDatabase({ DATABASE_BACKEND: "turso", TURSO_DATABASE_URL: "libsql://example.turso.io", TURSO_AUTH_TOKEN: "fake" }, async (url, options) => {
+    assert.equal(options.redirect, "manual");
+    return new Response(null, { status: 302, headers: { Location: "https://example.com" } });
+  });
+  await assert.rejects(db.prepare("SELECT 1").first(), /302/);
+});
