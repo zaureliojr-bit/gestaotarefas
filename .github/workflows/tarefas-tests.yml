@@ -1,0 +1,19 @@
+name: Tarefas tests
+on:
+  pull_request:
+    paths:
+      - 'tarefas-d1/**'
+      - '.github/workflows/tarefas-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tarefas-d1/database.test.mjs
+      - run: node tarefas-d1/teste.mjs
