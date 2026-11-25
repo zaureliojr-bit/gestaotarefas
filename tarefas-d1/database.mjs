@@ -34,7 +34,7 @@ export function selectDatabase(env, fetcher = (url, options) => fetch(url, optio
     let response, payload;
     try {
       response = await fetcher(endpoint, {
-      method: "POST", redirect: "error",
+      method: "POST", redirect: "manual",
       headers: { Authorization: "Bearer " + env.TURSO_AUTH_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({ baton: null, requests: [
         { type: "execute", stmt: { sql, args: args.map(encode), want_rows: wantRows } },
