@@ -20,7 +20,7 @@ function decode(cell) {
     default: throw new Error("Unexpected SQL value");
   }
 }
-export function selectDatabase(env, fetcher = fetch) {
+export function selectDatabase(env, fetcher = (url, options) => fetch(url, options)) {
   const backend = env.DATABASE_BACKEND || "d1";
   if (backend === "d1") return env.DB;
   if (backend !== "turso") throw new Error("Invalid database backend");
@@ -29,21 +29,34 @@ export function selectDatabase(env, fetcher = fetch) {
   if (url.protocol !== "https:" || url.username || url.password || !url.hostname.endsWith(".turso.io")) throw new Error("Invalid Turso URL");
   const endpoint = new URL("/v2/pipeline", url).href;
   async function execute(sql, args, wantRows) {
-    const response = await fetcher(endpoint, {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let response, payload;
+    try {
+      response = await fetcher(endpoint, {
       method: "POST", redirect: "error",
       headers: { Authorization: "Bearer " + env.TURSO_AUTH_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({ baton: null, requests: [
         { type: "execute", stmt: { sql, args: args.map(encode), want_rows: wantRows } },
         { type: "close" }
       ] }),
-      signal: AbortSignal.timeout(15000)
-    });
-    if (!response.ok) throw new Error("Turso HTTP " + response.status);
-    const payload = await response.json();
+      signal: controller.signal
+      });
+      if (!response.ok) {
+        console.error("Turso upstream HTTP status", response.status);
+        throw new Error("Turso HTTP " + response.status);
+      }
+      payload = await response.json();
+    } catch (error) {
+      console.error("Turso transport stage failed", error?.name || "Error");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     const entry = payload.results?.[0];
     if (entry?.type !== "ok" || entry.response?.type !== "execute") throw new Error("Turso SQL failed");
     const result = entry.response.result;
-    const results = result.rows.map(row => Object.fromEntries(result.cols.map((col, i) => [col.name, decode(row[i])])));
+    const results = wantRows ? result.rows.map(row => Object.fromEntries(result.cols.map((col, i) => [col.name, decode(row[i])]))) : [];
     return { results, success: true, meta: { changes: result.affected_row_count } };
   }
   function statement(sql, args = []) {

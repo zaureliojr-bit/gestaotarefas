@@ -30,5 +30,6 @@
       "pattern": "tarefas.drogalink.com.br",
       "custom_domain": true
     }
-  ]
+  ],
+  "keep_vars": true
 }
