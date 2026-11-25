@@ -44,7 +44,7 @@ export function selectDatabase(env, fetcher = (url, options) => fetch(url, optio
       });
       if (!response.ok) {
         console.error("Turso upstream HTTP status", response.status);
-        throw new Error("Turso HTTP failure");
+        throw new Error("Turso HTTP " + response.status);
       }
       payload = await response.json();
     } catch (error) {
