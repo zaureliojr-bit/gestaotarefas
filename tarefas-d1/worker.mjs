@@ -1,3 +1,4 @@
+import { selectDatabase } from "./database.mjs";
 import { handleAuth, sessionViewer } from "./auth.mjs";
 import { normalize, generateCashTasks, localDay, STATUSES, CHECKLIST } from "./public/model.mjs";
 import { validatePlan, analyzePlan, isPharmacist } from "./public/schedule.mjs";
@@ -506,6 +507,7 @@ export default {
       if (path === "/api/auth/mode" && request.method === "GET") {
         return json({ internal: env.AUTH_MODE === "internal" });
       }
+      env = { ...env, DB: selectDatabase(env) };
       if (request.method === "POST" && ["/api/auth/login", "/api/auth/logout", "/api/auth/password", "/api/auth/password-link"].includes(path)) {
         return await handleAuth(request, env.DB, path, {
           body, json, HttpError, getViewer: () => getViewer(request, env), pepper: env.AUTH_PASSWORD_PEPPER
