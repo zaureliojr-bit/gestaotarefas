@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import worker from "./worker.mjs";
-import { analyzePlan, generatePlan, monthDays, defaultShift, dailyMinutes, shiftEnd, normalizeShiftTime, weekday, reconcileRoster } from "./public/schedule.mjs";
+import { analyzePlan, generatePlan, monthDays, defaultShift, dailyMinutes, shiftEnd, normalizeShiftTime, weekday, reconcileRoster, weekendRestForWeek } from "./public/schedule.mjs";
 
 const sql = new DatabaseSync(":memory:");
 const migration = readFileSync(new URL("./migrations/0001_tarefas.sql", import.meta.url), "utf8");
@@ -412,3 +412,24 @@ assert.equal(reconcileRoster(reconciled, [{ ...activeRoster[0], preferredShiftId
 assert.equal(reconcileRoster(reconciled, activeRoster, true).rows[0].shiftId, 2);
 assert.equal(reconcileRoster(reconciled, []).rows.length, 0);
 console.log("OK: geração 5×2, continuidade entre meses, cobertura, publicação, controle de revisão e permissões de escala.");
+
+ // Revezamento fixo da rede, incluindo a virada do mês.
+{
+  const row = { ...plan.rows[0], fixedRestDay: 1, weekendRestDay: 5 };
+  const dec = generatePlan({ ...plan, rows: [row], restPattern: "separate" });
+  const jan = generatePlan({ ...dec, month: "2027-01", holidays: [], rows: [{ ...row, days: monthDays("2027-01").map(() => "T") }] }, [dec]);
+  assert.equal(weekendRestForWeek(row, "2026-11-30"), 5);
+  assert.equal(weekendRestForWeek(row, "2026-12-07"), 6);
+  assert.equal(weekendRestForWeek(row, "2027-01-04"), 6);
+  for (const p of [dec, jan]) {
+    monthDays(p.month).forEach((day, i) => {
+      const d = weekday(day);
+      const monday = new Date(day + "T12:00:00Z");
+      monday.setUTCDate(monday.getUTCDate() - d);
+      const rest = d === 1 || d === weekendRestForWeek(row, monday.toISOString().slice(0,10));
+      assert.equal(p.rows[0].days[i], rest ? "F" : "T");
+    });
+  }
+  assert.equal(analyzePlan(dec, [jan]).issues.length, 0);
+  assert.equal(analyzePlan(jan, [dec]).issues.length, 0);
+}
