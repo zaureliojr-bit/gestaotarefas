@@ -44,7 +44,8 @@ export function reconcileRoster(plan, people, forcePreferred = false) {
       else shiftId = shifts[0].id;
     }
     return { ...row, personId: person.id, name: person.name, jobTitle: person.jobTitle ?? "", shiftId, rosterPreferredShiftId: preference,
-      fixedRestDay: isPharmacist(person.jobTitle ?? "") ? row?.fixedRestDay ?? null : null,
+      fixedRestDay: row?.fixedRestDay ?? null,
+      weekendRestDay: row?.weekendRestDay ?? null,
       days: row?.days ?? monthDays(plan.month).map(() => "F") };
   });
   shifts.sort((a, b) => a.id - b.id);
@@ -54,6 +55,19 @@ const states = ["T", "F", "V", "A"];
 const text = (value, max) => typeof value === "string" && value.trim() && value.length <= max;
 export const isPharmacist = job => /^farmac[eê]utic[oa]$/i.test(job.trim());
 const fixedRest = row => Number.isInteger(row.fixedRestDay);
+const fixedSunday = row => fixedRest(row) && isPharmacist(row.jobTitle) && row.weekendRestDay == null;
+// A single network-wide reference week keeps the rotation stable across months.
+export function weekendRestForWeek(row, monday) {
+  if (!fixedRest(row)) return null;
+  if (fixedSunday(row)) return 6;
+  if (row.weekendRestDay == null) return null;
+  const weeks = Math.round((date(monday) - date("2026-11-30")) / 604800000);
+  return Math.abs(weeks % 2) === 0 ? row.weekendRestDay : 11 - row.weekendRestDay;
+}
+const requiredRestDays = (row, monday) => {
+  const weekend = weekendRestForWeek(row, monday);
+  return fixedRest(row) ? [row.fixedRestDay, ...(weekend == null ? [] : [weekend])] : [];
+};
 const flexibleOn = (rule, day) => rule.flexibleDays?.includes(weekday(day)) ?? false;
 export function validatePlan(plan) {
   if (!plan || !validMonth(plan.month) || !text(plan.unitId, 64) || !["draft", "published"].includes(plan.status)) throw new Error("Escala inválida.");
@@ -66,7 +80,9 @@ export function validatePlan(plan) {
   const shiftIds = new Set(plan.shifts.map(s => s.id));
   if (!Array.isArray(plan.rows) || plan.rows.length > 300 || plan.rows.some(r => !r || !Number.isSafeInteger(r.personId) || r.personId <= 0 ||
     !text(r.name, 150) || typeof r.jobTitle !== "string" || r.jobTitle.length > 100 || !shiftIds.has(r.shiftId) ||
-    (r.fixedRestDay != null && (!isPharmacist(r.jobTitle) || !Number.isInteger(r.fixedRestDay) || r.fixedRestDay < 0 || r.fixedRestDay > 5)) ||
+    (r.fixedRestDay != null && (!Number.isInteger(r.fixedRestDay) || r.fixedRestDay < 0 || r.fixedRestDay > (isPharmacist(r.jobTitle) && r.weekendRestDay == null ? 5 : 4))) ||
+    (r.weekendRestDay != null && (![5, 6].includes(r.weekendRestDay) || !fixedRest(r))) ||
+    (fixedRest(r) && !isPharmacist(r.jobTitle) && r.weekendRestDay == null) ||
     !Array.isArray(r.days) || r.days.length !== days.length || r.days.some(s => !states.includes(s))) ||
     new Set(plan.rows.map(r => r.personId)).size !== plan.rows.length) throw new Error("Funcionários ou dias da escala inválidos.");
   if (!Array.isArray(plan.holidays) || new Set(plan.holidays).size !== plan.holidays.length || plan.holidays.some(day => !days.includes(day))) throw new Error("Feriados inválidos.");
@@ -100,7 +116,7 @@ export function analyzePlan(plan, neighbors = []) {
       const eligible = plan.rows.filter(r => r.shiftId === shift.id && (!rule.jobTitle || jobKey(r.jobTitle) === jobKey(rule.jobTitle)));
       const requiredDays = 7 - (rule.flexibleDays?.length ?? 0);
       const sundayRequired = !(rule.flexibleDays ?? []).includes(6);
-      const fixedSundayOff = eligible.filter(fixedRest).length;
+      const fixedSundayOff = eligible.filter(fixedSunday).length;
       const required = requiredDays ? Math.max(rule.minimum, Math.ceil(requiredDays * rule.minimum / 5), sundayRequired ? 2 * rule.minimum + fixedSundayOff : 0) : 0;
       let missing = Math.max(0, required - eligible.length);
       for (let day = 0; day < 6; day++) if (!(rule.flexibleDays ?? []).includes(day)) {
@@ -132,7 +148,12 @@ export function analyzePlan(plan, neighbors = []) {
     let sundayStreak = 0;
     for (let day = offsetDay(days[0], -21); day <= offsetDay(days.at(-1), 7); day = offsetDay(day, 1)) {
       const state = dayState(plan, row.personId, day, neighbors);
-      if (day.startsWith(plan.month) && fixedRest(row) && (weekday(day) === 6 || weekday(day) === row.fixedRestDay) && state === "T") issues.push(`${row.name}: trabalhou em dia de folga fixa (${day}).`);
+      if (day.startsWith(plan.month) && fixedRest(row)) {
+        const dow = weekday(day);
+        const rests = requiredRestDays(row, offsetDay(day, -dow));
+        if (rests.includes(dow) && state === "T") issues.push(`${row.name}: trabalhou em dia de folga programada (${day}).`);
+        if (!rests.includes(dow) && rests.length === 2 && state === "F") issues.push(`${row.name}: folga fora do revezamento programado (${day}).`);
+      }
       streak = state === "T" ? streak + 1 : 0;
       restStreak = state === "F" ? restStreak + 1 : 0;
       if (day >= days[0] && offsetDay(day, -restLimit) <= days.at(-1) && restStreak === restLimit + 1) issues.push(`${row.name}: ${restStreak} folgas seguidas (${day}).`);
@@ -190,8 +211,12 @@ export function generatePlan(plan, neighbors = []) {
           score += Math.abs(restInMonth - desired) * 80;
         }
         const restLimit = plan.restPattern === "separate" && !fixedRest(row) ? 1 : 2;
-        if (fixedRest(row)) for (let i = 0; i < 7; i++) {
-          if ((i === 6 || i === row.fixedRestDay) && pattern[i] === "T" && inMonth[i]) score += 1000000;
+        if (fixedRest(row)) {
+          const requiredRests = requiredRestDays(row, week);
+          for (let i = 0; i < 7; i++) {
+            if (requiredRests.includes(i) && pattern[i] === "T") score += 1000000;
+            if (requiredRests.length === 2 && !requiredRests.includes(i) && pattern[i] === "F") score += 1000000;
+          }
         }
         let restStreak = 0;
         for (let prior = offsetDay(week, -1); restStreak <= restLimit && dayState(history, row.personId, prior, neighbors) === "F"; prior = offsetDay(prior, -1)) restStreak++;
