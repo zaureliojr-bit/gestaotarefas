@@ -804,7 +804,10 @@ function populateSelects() {
   const jobs = new Map(data.people.filter(p => p.jobTitle?.trim()).map(p => [unitNameKey(p.jobTitle), p.jobTitle.trim()]));
   options("filterPeopleJob", '<option value="">Todos os cargos</option>' + [...jobs].sort((a, b) => a[1].localeCompare(b[1], "pt-BR")).map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join(""));
   options("filterDepartment", '<option value="">Todos os departamentos</option>' + departments);
-  options("taskPerson", '<option value="">Não atribuído</option>' + data.people.map(p =>
+  options("taskPerson", '<option value="">Não atribuído</option>' + data.people.filter(p => p.unitId
+    ? data.units.some(unit => unit.id === p.unitId && !unit.store)
+    : data.departments.some(department => department.id === p.departmentId)
+  ).map(p =>
     `<option value="${p.id}">${esc(p.name)} · ${esc(deptName(p.departmentId))}</option>`
   ).join(""));
   const units = data.units.map(unit => `<option value="${esc(unit.id)}">${esc(unit.name)}</option>`).join("");
@@ -836,6 +839,17 @@ function openTask(id) {
   $("taskDescription").value = task?.description ?? "";
   $("taskUnit").value = task ? task.unitId ?? "" : selectedUnit === "none" ? "" : selectedUnit;
   $("taskDepartment").value = task?.departmentId ?? ($("filterDepartment").value || data.departments[0]?.id || "");
+  const previousAssignee = $("taskPerson").querySelector("[data-previous-assignee]");
+  previousAssignee?.remove();
+  if (task?.personId && !Array.from($("taskPerson").options).some(option => Number(option.value) === task.personId)) {
+    const assigned = data.people.find(person => person.id === task.personId);
+    if (assigned) {
+      const option = new Option(assigned.name, String(assigned.id));
+      option.hidden = true;
+      option.dataset.previousAssignee = "true";
+      $("taskPerson").add(option);
+    }
+  }
   $("taskPerson").value = task?.personId ?? "";
   $("taskDue").value = task?.due ?? "";
   $("taskPriority").value = task?.priority ?? "Média";
