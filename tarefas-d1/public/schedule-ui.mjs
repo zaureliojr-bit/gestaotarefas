@@ -55,7 +55,7 @@ export function setupSchedules({ api, notify, getData, getViewer, getRevision, s
     const days = monthDays(month);
     const rows = context.people.filter(p => p.employmentStatus === "Ativo").map(p => {
       const previous = template?.rows.find(r => r.personId === p.id);
-      return { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, previous?.shiftId), rosterPreferredShiftId: p.preferredShiftId ?? null, fixedRestDay: isPharmacist(p.jobTitle) ? previous?.fixedRestDay ?? null : null, days: days.map(() => "T") };
+      return { personId: p.id, name: p.name, jobTitle: p.jobTitle, shiftId: preferredShift(p, shifts, previous?.shiftId), rosterPreferredShiftId: p.preferredShiftId ?? null, fixedRestDay: previous?.fixedRestDay ?? null, weekendRestDay: previous?.weekendRestDay ?? null, days: days.map(() => "T") };
     });
     return { unitId, month, shifts, rows, coverage: structuredClone(template?.coverage ?? []), holidays: days.filter(d => fixedHolidays.includes(d.slice(5))), restPattern: template?.restPattern ?? "separate", status: "draft" };
   }
@@ -97,8 +97,7 @@ export function setupSchedules({ api, notify, getData, getViewer, getRevision, s
   function render() {
     if (!plan) return;
     $("scheduleRestPattern").value = plan.restPattern ?? "free";
-    const pharmacists = plan.rows.filter(r => isPharmacist(r.jobTitle));
-    $("scheduleFixedRest").innerHTML = pharmacists.length ? `<h3>Folgas fixas dos farmacêuticos</h3><p class="task-meta">Escolha domingo fixo e mais um dia da semana. A cobertura obrigatória continua sendo verificada.</p>${pharmacists.map(r => `<label>${esc(r.name)}<select data-fixed-rest="${r.personId}">${option("", "Revezamento normal", r.fixedRestDay == null)}${weekNames.slice(0, 6).map((name, day) => option(day, `Domingo + ${name}`, r.fixedRestDay === day)).join("")}</select></label>`).join("")}` : "";
+    $("scheduleFixedRest").innerHTML = plan.rows.length ? `<h3>Folgas fixas e revezamento 5x2</h3><p class="task-meta">Defina a folga semanal e o fim de semana de referência (30/11 a 06/12/2026). Nas semanas seguintes, sábado e domingo alternam automaticamente. Farmacêuticos podem escolher domingo fixo.</p>${plan.rows.map(r => `<div><label>${esc(r.name)} · ${esc(r.jobTitle)}<select data-fixed-rest="${r.personId}">${option("", "Não configurado / geração livre", r.fixedRestDay == null)}${weekNames.slice(0, isPharmacist(r.jobTitle) && r.weekendRestDay == null ? 6 : 5).map((name, day) => option(day, name, r.fixedRestDay === day)).join("")}</select></label>${r.fixedRestDay != null ? `<label>Fim de semana<select data-weekend-rest="${r.personId}">${isPharmacist(r.jobTitle) ? option("", "Domingo fixo", r.weekendRestDay == null) : ""}${option(5, "Sábado na semana de referência", r.weekendRestDay === 5)}${option(6, "Domingo na semana de referência", r.weekendRestDay === 6)}</select></label>` : ""}</div>`).join("")}` : "";
     const days = monthDays(plan.month);
     $("scheduleHeading").textContent = `${getData().units.find(u => u.id === plan.unitId)?.name ?? plan.unitId} · ${plan.month.slice(5)}/${plan.month.slice(0, 4)}`;
     $("scheduleShiftSummary").textContent = plan.shifts.map(s => `${s.name}: ${s.start}–${shiftEnd(s)} · intervalo ${s.breakMinutes} min`).join(" | ");
@@ -204,9 +203,18 @@ export function setupSchedules({ api, notify, getData, getViewer, getRevision, s
     } catch (e) { error(e.message); }
   };
   $("scheduleFixedRest").onchange = e => {
-    const row = plan.rows.find(r => r.personId === Number(e.target.dataset.fixedRest));
-    if (!row || !isPharmacist(row.jobTitle)) return;
-    row.fixedRestDay = e.target.value === "" ? null : Number(e.target.value);
+    const fixed = e.target.dataset.fixedRest;
+    const weekend = e.target.dataset.weekendRest;
+    const row = plan.rows.find(r => r.personId === Number(fixed ?? weekend));
+    if (!row) return;
+    if (fixed != null) {
+      row.fixedRestDay = e.target.value === "" ? null : Number(e.target.value);
+      if (row.fixedRestDay == null) row.weekendRestDay = null;
+      else if (!isPharmacist(row.jobTitle) && row.weekendRestDay == null) row.weekendRestDay = 5;
+    } else if (weekend != null) {
+      row.weekendRestDay = e.target.value === "" ? null : Number(e.target.value);
+      if (row.weekendRestDay != null && row.fixedRestDay === 5) row.fixedRestDay = 4;
+    } else return;
     markDirty(); render();
   };
   $("scheduleRestPattern").onchange = () => { plan.restPattern = $("scheduleRestPattern").value; markDirty(); render(); };
