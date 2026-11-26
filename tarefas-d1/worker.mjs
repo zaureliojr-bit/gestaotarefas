@@ -347,8 +347,9 @@ async function schedules(request, db, viewer) {
     if (!person) throw new HttpError(400, "Funcionário fora da unidade.");
     row.name = person.name;
     row.jobTitle = person.jobTitle;
-    if (!isPharmacist(row.jobTitle)) row.fixedRestDay = null;
+    // Folgas fixas e alternadas são permitidas para todos os cargos.
   }
+  try { validatePlan(plan); } catch (error) { throw new HttpError(400, error.message); }
   if (plan.status === "published" && (!plan.rows.length || analyzePlan(plan, unitPlans).issues.length)) throw new HttpError(400, "Resolva os conflitos antes de publicar.");
   current.data.schedules = current.data.schedules.filter(p => p.unitId !== unitId || p.month !== plan.month);
   current.data.schedules.push(plan);
